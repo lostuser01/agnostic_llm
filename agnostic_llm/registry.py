@@ -4,7 +4,18 @@ import os
 from typing import Callable
 from .base import LLM
 from .router import FallbackLLM
+from .types import LLMError
 from .yaml_helper import load_config_data
+
+
+class UnavailableLLM(LLM):
+    """Placeholder when a provider's library is not installed or cannot be initialized."""
+    def __init__(self, key: str, reason: str):
+        self.name = f"unavailable[{key}]"
+        self.reason = reason
+
+    def chat(self, messages, tools=None, **opts):
+        raise LLMError(f"{self.name}: {self.reason}")
 
 
 def _anthropic(**kw):
@@ -44,7 +55,10 @@ class Models:
         env = spec.pop("api_key_env", None)
         if env:
             spec["api_key"] = os.environ.get(env)
-        return PROVIDERS[provider](**spec)
+        try:
+            return PROVIDERS[provider](**spec)
+        except Exception as e:
+            return UnavailableLLM(key, str(e))
 
     def get(self, name: str = "default") -> LLM:
         """`name` is either a route (ordered fallback list) or a single model key."""

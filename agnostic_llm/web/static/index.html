@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agnostic AI — macOS Employee Army & Voice Suite</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="macos-theme">
+  <!-- macOS Window Container -->
+  <div class="window-frame">
+    <!-- Window Title Bar -->
+    <header class="window-header">
+      <div class="traffic-lights">
+        <span class="dot close"></span>
+        <span class="dot minimize"></span>
+        <span class="dot zoom"></span>
+      </div>
+      <div class="window-title">
+        <span class="apple-logo">🍎</span>
+        <span>Agnostic AI — Executive Employee Army</span>
+      </div>
+      <div class="header-actions">
+        <label class="voice-toggle-label" title="Speak responses aloud using native macOS voice">
+          <input type="checkbox" id="voice-toggle" checked>
+          <span class="toggle-switch"></span>
+          <span class="voice-label-text">macOS Voice</span>
+        </label>
+        <button id="standup-btn" class="mac-btn mac-btn-secondary" title="Run Executive Standup">
+          <span>⚡ Standup</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="workspace-body">
+      <!-- Left Sidebar: Employee Roster -->
+      <aside class="sidebar">
+        <div class="sidebar-section-title">YOUR AI EMPLOYEES</div>
+        <div class="employee-list" id="employee-list">
+          <!-- Populated dynamically via JS -->
+        </div>
+
+        <div class="sidebar-section-title" style="margin-top: 24px;">WORKSPACES</div>
+        <nav class="nav-tabs">
+          <button class="nav-tab-btn active" data-tab="tab-chat">
+            <span class="tab-icon">🎙️</span> Voice & Chat
+          </button>
+          <button class="nav-tab-btn" data-tab="tab-agenda">
+            <span class="tab-icon">📅</span> Day Planner & Calendar
+          </button>
+          <button class="nav-tab-btn" data-tab="tab-crm">
+            <span class="tab-icon">💼</span> Freelance CRM & Pitches
+          </button>
+          <button class="nav-tab-btn" data-tab="tab-marketing">
+            <span class="tab-icon">🚀</span> Marketing & Growth Lab
+          </button>
+          <button class="nav-tab-btn" data-tab="tab-manuscript">
+            <span class="tab-icon">✍️</span> Empathy & Manuscript Studio
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="system-status">
+            <span class="status-indicator online"></span>
+            <span id="model-route-info">Route: Ready</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Main Content -->
+      <main class="main-content">
+        <!-- TAB 1: Voice & Chat -->
+        <section class="tab-pane active" id="tab-chat">
+          <div class="chat-header">
+            <div class="active-emp-profile">
+              <span class="emp-avatar-large" id="current-emp-avatar">👑</span>
+              <div>
+                <h2 id="current-emp-name">Supervisor</h2>
+                <p id="current-emp-title">Team Orchestrator & Operations Director</p>
+              </div>
+            </div>
+            <div class="chat-controls">
+              <button id="clear-chat-btn" class="mac-btn mac-btn-ghost">Clear</button>
+              <button id="stop-speech-btn" class="mac-btn mac-btn-danger" style="display: none;">Stop Speaking</button>
+            </div>
+          </div>
+
+          <!-- Suggested Quick Prompts -->
+          <div class="quick-prompts-bar">
+            <span class="quick-prompt-chip" data-prompt="Plan my day with time blocks and prioritize today's tasks">⏱️ Plan my day</span>
+            <span class="quick-prompt-chip" data-prompt="Find 3 high-paying freelance niches and draft a $10k cold pitch">💼 $10k Freelance Pitch</span>
+            <span class="quick-prompt-chip" data-prompt="Generate a 3-part viral LinkedIn campaign on building with AI agents">🚀 Viral Social Campaign</span>
+            <span class="quick-prompt-chip" data-prompt="Help me write an empathetic email to a client asking to push a deadline gracefully">✍️ Empathetic Client Email</span>
+            <span class="quick-prompt-chip" data-prompt="Outline an 8-chapter book on creative leverage and sovereign work">📖 Outline My Book</span>
+          </div>
+
+          <!-- Conversation Message Stream -->
+          <div class="messages-container" id="messages-container">
+            <div class="message assistant-message">
+              <div class="msg-avatar">👑</div>
+              <div class="msg-body">
+                <div class="msg-author">Supervisor</div>
+                <div class="msg-text">Good day. Your executive employee army is assembled and ready on macOS. Alex is defending your schedule, Morgan is hunting freelance deals, Taylor is expanding your distribution, and Elena is calibrated with Claude Haiku 4.5 for high-empathy communications. How can we drive your mission forward today?</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Voice & Text Input Console -->
+          <div class="chat-input-area">
+            <!-- Audio Waveform Visualizer -->
+            <div class="waveform-container" id="waveform-container">
+              <div class="waveform-bars">
+                <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+              </div>
+              <span class="waveform-status" id="waveform-status">Listening to your voice...</span>
+            </div>
+
+            <div class="input-row">
+              <button id="mic-btn" class="mic-button" title="Hold or Click to Speak (Voice Chat)">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+              </button>
+              <textarea id="chat-input" placeholder="Type a message or click the microphone to speak..." rows="1"></textarea>
+              <button id="send-btn" class="mac-btn mac-btn-primary">
+                <span>Send</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 2: Day Planner & Calendar (Alex) -->
+        <section class="tab-pane" id="tab-agenda">
+          <div class="pane-header">
+            <div>
+              <h2>⏱️ Alex's Executive Day Planner & Agenda</h2>
+              <p>Calendar defense, time blocking, and task completion synced with macOS.</p>
+            </div>
+            <div class="pane-actions">
+              <button id="quick-plan-btn" class="mac-btn mac-btn-primary">⚡ Generate Day Plan</button>
+            </div>
+          </div>
+
+          <div class="grid-two-col">
+            <!-- Scheduled Meetings -->
+            <div class="card">
+              <div class="card-header">
+                <h3>📅 Scheduled Events</h3>
+                <button id="add-event-toggle-btn" class="mac-btn mac-btn-sm">+ New Event</button>
+              </div>
+              <div id="add-event-form" class="inline-form" style="display: none;">
+                <input type="text" id="ev-title" placeholder="Meeting Title">
+                <input type="text" id="ev-time" placeholder="Start Time (e.g. 2026-11-12 14:00)">
+                <input type="number" id="ev-dur" placeholder="Minutes (60)" value="60">
+                <input type="text" id="ev-loc" placeholder="Location / Zoom link">
+                <button id="ev-submit-btn" class="mac-btn mac-btn-primary mac-btn-sm">Schedule on macOS</button>
+              </div>
+              <div class="items-list" id="events-list">
+                <!-- Loaded via JS -->
+              </div>
+            </div>
+
+            <!-- Task Board -->
+            <div class="card">
+              <div class="card-header">
+                <h3>✅ Pending Tasks & Priorities</h3>
+                <button id="add-task-toggle-btn" class="mac-btn mac-btn-sm">+ New Task</button>
+              </div>
+              <div id="add-task-form" class="inline-form" style="display: none;">
+                <input type="text" id="task-title" placeholder="Task description">
+                <select id="task-prio">
+                  <option value="high">High Priority</option>
+                  <option value="medium" selected>Medium Priority</option>
+                  <option value="low">Low Priority</option>
+                </select>
+                <input type="text" id="task-cat" placeholder="Category (e.g. Client, Marketing)">
+                <button id="task-submit-btn" class="mac-btn mac-btn-primary mac-btn-sm">Add Task</button>
+              </div>
+              <div class="items-list" id="tasks-list">
+                <!-- Loaded via JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: Freelance CRM & Pitches (Morgan) -->
+        <section class="tab-pane" id="tab-crm">
+          <div class="pane-header">
+            <div>
+              <h2>💼 Morgan's Freelance Hunter & Deal Lab</h2>
+              <p>Pipeline CRM, high-ticket cold pitches, client proposals, and rate quotes.</p>
+            </div>
+            <div class="pane-actions">
+              <button id="pitch-helper-btn" class="mac-btn mac-btn-primary">🎯 Draft $10k Proposal</button>
+            </div>
+          </div>
+
+          <div class="grid-two-col">
+            <!-- Pipeline Leads -->
+            <div class="card">
+              <div class="card-header">
+                <h3>💼 Client Pipeline (CRM)</h3>
+                <button id="add-lead-toggle-btn" class="mac-btn mac-btn-sm">+ Add Lead</button>
+              </div>
+              <div id="add-lead-form" class="inline-form" style="display: none;">
+                <input type="text" id="lead-name" placeholder="Client / Contact Name">
+                <input type="text" id="lead-company" placeholder="Company Name">
+                <input type="text" id="lead-scope" placeholder="Project Scope (e.g. AI Workflow)">
+                <input type="text" id="lead-value" placeholder="Estimated Value (e.g. $8,500)">
+                <select id="lead-status">
+                  <option value="lead">Lead</option>
+                  <option value="pitched">Pitched</option>
+                  <option value="negotiating">Negotiating</option>
+                  <option value="won">Won 🎉</option>
+                </select>
+                <button id="lead-submit-btn" class="mac-btn mac-btn-primary mac-btn-sm">Save Lead</button>
+              </div>
+              <div class="items-list" id="leads-list">
+                <!-- Loaded via JS -->
+              </div>
+            </div>
+
+            <!-- Rate Calculator & Pitch Generator -->
+            <div class="card">
+              <div class="card-header">
+                <h3>💰 Value-Based Pricing Calculator</h3>
+              </div>
+              <div class="calculator-box">
+                <div class="calc-row">
+                  <label>Hourly Baseline ($):</label>
+                  <input type="number" id="calc-rate" value="125">
+                </div>
+                <div class="calc-row">
+                  <label>Estimated Hours:</label>
+                  <input type="number" id="calc-hours" value="40">
+                </div>
+                <div class="calc-row">
+                  <label>Value Markup (%):</label>
+                  <input type="number" id="calc-markup" value="30">
+                </div>
+                <button id="calc-btn" class="mac-btn mac-btn-secondary mac-btn-block">Calculate Structured Tiers</button>
+                <div id="calc-result" class="code-box">Click calculate to generate tiered pricing...</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 4: Marketing Hub (Taylor) -->
+        <section class="tab-pane" id="tab-marketing">
+          <div class="pane-header">
+            <div>
+              <h2>🚀 Taylor's Growth & Marketing Strategist</h2>
+              <p>Audience growth, viral hook analysis, multi-platform social campaigns, and newsletters.</p>
+            </div>
+          </div>
+
+          <div class="grid-two-col">
+            <!-- Viral Hook Analyzer -->
+            <div class="card">
+              <div class="card-header">
+                <h3>🪝 Viral Hook Analyzer</h3>
+              </div>
+              <div class="hook-box">
+                <textarea id="hook-input" rows="3" placeholder="Paste your headline or hook here (e.g. 'How to build an AI team without hiring full time')..."></textarea>
+                <button id="analyze-hook-btn" class="mac-btn mac-btn-primary mac-btn-block">Analyze Hook Psychology</button>
+                <div id="hook-result" class="code-box">Hook evaluation and variations will appear here...</div>
+              </div>
+            </div>
+
+            <!-- Recent Campaigns -->
+            <div class="card">
+              <div class="card-header">
+                <h3>📢 Marketing Campaigns & Newsletters</h3>
+              </div>
+              <div class="items-list" id="campaigns-list">
+                <!-- Loaded via JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 5: Empathy & Manuscript Studio (Elena) -->
+        <section class="tab-pane" id="tab-manuscript">
+          <div class="pane-header">
+            <div>
+              <h2>✍️ Elena's High-Empathy Wordsmith & Manuscript Studio</h2>
+              <p>Powered by Claude Haiku 4.5 / Sonnet. Sensitive client communication, book chapters, and literary prose.</p>
+            </div>
+          </div>
+
+          <div class="grid-two-col">
+            <!-- High-Empathy Email Calibrator -->
+            <div class="card">
+              <div class="card-header">
+                <h3>💌 Empathetic Email & Tone Calibrator</h3>
+              </div>
+              <div class="empathy-box">
+                <label>Draft Email / Message:</label>
+                <textarea id="empathy-input" rows="4" placeholder="Paste a blunt, stressful, or sensitive email draft here..."></textarea>
+                <div class="calc-row">
+                  <input type="text" id="empathy-recipient" placeholder="Recipient context (e.g. Demanding client, stressed partner)">
+                </div>
+                <div class="btn-group">
+                  <button id="calibrate-empathy-btn" class="mac-btn mac-btn-primary">Calibrate Empathy (Haiku 4.5)</button>
+                  <button id="open-mail-btn" class="mac-btn mac-btn-secondary">Open in Apple Mail</button>
+                </div>
+                <div id="empathy-result" class="code-box">Refined empathetic draft will appear here...</div>
+              </div>
+            </div>
+
+            <!-- Manuscript Studio -->
+            <div class="card">
+              <div class="card-header">
+                <h3>📖 Long-Form Book & Manuscript Chapters</h3>
+              </div>
+              <div class="items-list" id="manuscripts-list">
+                <!-- Loaded via JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+

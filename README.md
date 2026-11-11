@@ -1,35 +1,196 @@
-# agnostic-llm
+# Agnostic AI — macOS Autonomous Employee Army & Voice Suite
 
-One interface, any model. Your app talks to `LLM`; adapters talk to vendors.
+Transform single-model scripts into a full-scale, **macOS-supported executive employee army** with **two-way voice chat**, calendar/task synchronization, freelance client acquisition, growth marketing, and high-empathy communication powered by models like **Claude Haiku 4.5**, **Claude Sonnet 3.7**, **GPT-4o**, and **Gemini Flash**.
+
+---
+
+## Requirements
+
+- Python 3.10 or newer
+- macOS for native voice, AppleScript, Calendar, Reminders, Mail, notifications, and clipboard integration
+- At least one configured model provider, or the built-in `mock` route for local testing
+- A browser with Web Speech API support (Chrome or Safari) for microphone input
+
+The core library and tests also run on non-macOS systems. Native macOS actions automatically fall back to local SQLite, logging, or in-memory clipboard behavior when unavailable.
+
+## ⚡ Install and Quick Start
+
+From the repository root:
 
 ```bash
-pip install -e ".[all]"
-cp config.example.yaml config.yaml     # edit models, set API keys as env vars
-python -m agnostic_llm "Explain recursion in one line"       # uses route "default"
-python -m agnostic_llm -m local "hi"                          # force a model
-python examples/demo.py                                       # no keys needed
-pytest
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[all]"
+cp config.example.yaml config.yaml
 ```
+
+Edit `config.yaml` and export the API keys for the providers you want to use:
+
+```bash
+export ANTHROPIC_API_KEY="your-anthropic-key"
+export OPENAI_API_KEY="your-openai-key"
+export GEMINI_API_KEY="your-gemini-key"
+```
+
+Only keys referenced by the routes you use are required. The `mock` provider does not need a key and is useful for testing the UI and tool plumbing.
+
+### Launch the dashboard
+
+```bash
+# Start the macOS web dashboard and voice studio
+./run_macos.sh
+
+# Or use the installed console command
+agnostic-ai --web --port 8000
+
+# Or start directly with Python
+python3 -m agnostic_llm --web --port 8000
+```
+
+Open <http://127.0.0.1:8000> if it does not open automatically. You can also double-click `AgnosticAI.command` in Finder.
+
+### Use the terminal assistant
+
+```bash
+# Talk to Elena with spoken macOS voice
+python3 -m agnostic_llm -e elena --voice
+
+# Ask Alex for a one-shot plan
+python3 -m agnostic_llm -e alex "Plan my day with time blocks"
+
+# Run an executive standup
+python3 -m agnostic_llm --standup --voice
+
+# Show today's agenda
+python3 -m agnostic_llm --agenda
+```
+
+The first request may use a fallback model if an earlier provider is unavailable. Routes are evaluated from left to right in `config.yaml`.
+
+---
+
+## 👥 Meet Your AI Employee Roster
+
+| Employee | Title & Domain | Model Route | macOS Voice | Key Capabilities |
+| :--- | :--- | :--- | :--- | :--- |
+| 👑 **Supervisor** | **Team Orchestrator** | `default` | *Samantha* | Coordinates team, routes intent, multi-agent delegation, executive standups |
+| ⏱️ **Alex** | **Chief of Staff & Day Planner** | `default` / `fast` | *Samantha* | Daily agenda, calendar defense, Apple Calendar & Reminders, time blocking, morning briefings |
+| 💼 **Morgan** | **Freelance & BizDev Hunter** | `default` / `reasoning` | *Daniel* | Prospecting freelance clients, $10k cold pitch proposals, value-based rate quotes, CRM pipeline |
+| 🚀 **Taylor** | **Growth & Marketing Strategist** | `default` | *Karen* | Viral hook psychology, multi-channel social campaigns (LinkedIn/X), newsletters, content calendars |
+| ✍️ **Elena** | **High-Empathy Wordsmith & Author** | `empathy` (*Claude Haiku 4.5 / Sonnet*) | *Moira* | Emotionally intelligent client emails, sensitive negotiations, book manuscripts, Apple Mail drafts |
+
+---
+
+## 🎙️ macOS Voice Chat Engine
+
+- **Voice Input (STT)**: Built-in Web Speech API microphone recognition directly in the macOS web dashboard with live animated audio waveforms.
+- **Voice Output (TTS)**: Native macOS `say` voice synthesis mapped to specific voice personas per employee (*Samantha*, *Daniel*, *Karen*, *Moira*), with markdown cleaning and non-blocking speech.
+- **Hands-Free Mode**: Toggle "macOS Voice" in the top bar to have employees speak their replies aloud.
+
+---
+
+## 🍎 macOS Native Integrations
+
+- **Apple Calendar & Daily Agenda**: Schedule meetings directly into macOS Calendar and retrieve today's schedule.
+- **Apple Reminders & Task Board**: Manage high/medium/low priority tasks with one-click completion.
+- **Apple Mail Integration**: Compose empathetic emails with Elena and open them directly in Apple Mail drafts.
+- **System Clipboard**: All generated proposals, schedules, and manuscripts can be copied to the macOS clipboard with one click (`pbcopy`/`pbpaste`).
+- **macOS System Notifications**: Delivers notification banners when tasks are finished or standups conclude.
+- **Local SQLite Persistence**: Persistent storage in `~/.agnostic_llm/data.db` (or `./.data/data.db`) ensures everything works offline, in sandbox, and in production.
+
+The application may ask macOS for permission to control Calendar, Reminders, and Mail. Approve those prompts in **System Settings → Privacy & Security → Automation**. If permissions are denied, local SQLite records still remain available.
+
+---
+
+## 🧪 Validate the installation
+
+```bash
+PYTHONPATH=. pytest -q
+```
+
+Run the dependency-free demo:
+
+```bash
+python examples/demo.py
+```
+
+The test suite uses temporary databases and mock models, so it does not make paid API calls.
+
+---
+
+## Troubleshooting
+
+- **Provider unavailable:** install the matching optional dependency with `python -m pip install anthropic` or `python -m pip install openai`, then verify the corresponding environment variable.
+- **Dashboard import error:** reinstall the project with `python -m pip install -e ".[all]"`; Starlette and Uvicorn are included in the base dependencies.
+- **No voice output:** confirm that `say` works in Terminal and that the configured voice is installed. Voice output is macOS-only.
+- **No microphone input:** allow browser microphone access and use Chrome or Safari.
+- **Unexpected data:** local state is stored in `.data/data.db` when launched from the repository, otherwise in `~/.agnostic_llm/data.db`. Delete the specific database file only if you intentionally want to reset local state.
+
+---
+
+## ⚙️ Configuration & High-Empathy Model Routing
+
+Edit `config.yaml` to specify your preferred model keys and fallback chains:
+
+```yaml
+models:
+  claude-haiku:
+    provider: anthropic
+    model: claude-3-5-haiku-20241022      # High empathy, fast, low cost
+    api_key_env: ANTHROPIC_API_KEY
+  claude-sonnet:
+    provider: anthropic
+    model: claude-3-7-sonnet-20250219     # Deep nuance & long-form manuscripts
+    api_key_env: ANTHROPIC_API_KEY
+  gpt-4o:
+    provider: openai
+    model: gpt-4o                         # Flagship general reasoning
+    api_key_env: OPENAI_API_KEY
+  gemini-flash:
+    provider: openai
+    model: gemini-2.0-flash
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+
+routes:
+  # Empathetic writing, difficult client emails, negotiations, and book manuscripts
+  empathy: [claude-haiku, claude-sonnet, gpt-4o, gemini-flash, mock]
+  fast: [gemini-flash, gpt-4o-mini, claude-haiku, mock]
+  default: [claude-haiku, gpt-4o, gemini-flash, mock]
+```
+
+---
+
+## 💻 Python Library Usage
 
 ```python
-from agnostic_llm import Models, Message, ToolSpec, run_agent
-llm = Models.from_file("config.yaml").get("default")   # Claude -> GPT -> Gemini fallback
-print(llm.ask("hello"))
+from agnostic_llm.employees import EmployeeRoster
+from agnostic_llm.voice import voice_engine
+
+# Load your full employee roster
+roster = EmployeeRoster.from_config("config.yaml")
+
+# Ask Alex to plan your day
+alex = roster.get("alex")
+res = alex.chat("Plan my day with 3 deep work blocks and schedule a 30-min strategy sync at 2 PM")
+print(res.text)
+
+# Ask Elena to calibrate an email with high empathy
+elena = roster.get("elena")
+res_elena = elena.chat("Refine this email to a client explaining a 2-day delivery adjustment with warmth and reassurance")
+print(res_elena.text)
+
+# Speak the result in Elena's voice (Moira)
+voice_engine.speak(res_elena.text, voice=elena.voice)
 ```
 
-## What's here
-- `types.py`    neutral Message / ToolSpec / LLMResponse + unified errors
-- `providers/`  Anthropic adapter, OpenAI-compatible adapter (OpenAI, Gemini, Ollama, vLLM, OpenRouter...), mock
-- `router.py`   retry + automatic fallback across models
-- `registry.py` config-driven model selection; `register_provider()` to add Bedrock/Vertex/etc.
-- `agent.py`    tool-calling loop that works identically on every provider
-- `evals.py`    run the same test cases on every model before you switch
+---
 
-## Adding a provider
-Subclass `LLM`, implement `chat()` (convert in, call, convert out, wrap errors with `map_exception`),
-then `register_provider("name", YourLLM)`.
+## 🧪 Testing
 
-## Caveats
-Prompts are not fully portable: run `evals.py` on your own cases whenever you change models.
-Use `provider_options={...}` to reach provider-only features (prompt caching, thinking) without leaking them into app code.
-Model names in `config.example.yaml` are examples; set the ones you actually have access to.
+Run the full automated test suite:
+```bash
+PYTHONPATH=. pytest
+```
+Tests cover model providers, conversions, multi-agent employee tools, macOS persistence, and voice processing.
