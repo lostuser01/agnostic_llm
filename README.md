@@ -72,6 +72,9 @@ python3 -m agnostic_llm -e elena --voice
 # Ask Alex for a one-shot plan
 python3 -m agnostic_llm -e alex "Plan my day with time blocks"
 
+# Ask Jack to work on the repository with GitHub Copilot
+python3 -m agnostic_llm -e jack "Inspect the repo and fix the failing tests"
+
 # Run an executive standup
 python3 -m agnostic_llm --standup --voice
 
@@ -92,6 +95,7 @@ The first request may use a fallback model if an earlier provider is unavailable
 | 💼 **Morgan** | **Freelance & BizDev Hunter** | `default` / `reasoning` | *Daniel* | Prospecting freelance clients, $10k cold pitch proposals, value-based rate quotes, CRM pipeline |
 | 🚀 **Taylor** | **Growth & Marketing Strategist** | `default` | *Karen* | Viral hook psychology, multi-channel social campaigns (LinkedIn/X), newsletters, content calendars |
 | ✍️ **Elena** | **High-Empathy Wordsmith & Author** | `empathy` (*Claude Haiku 4.5 / Sonnet*) | *Moira* | Emotionally intelligent client emails, sensitive negotiations, book manuscripts, Apple Mail drafts |
+| 💻 **Jack** | **Software Engineering Lead** | `copilot` (*GitHub Copilot*) | *Alex* | Coding, debugging, code review, repository maintenance, and test automation |
 
 ---
 

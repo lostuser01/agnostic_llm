@@ -70,7 +70,8 @@ class Employee:
         def delegate_task(target_employee: str, instruction: str) -> str:
             """Delegate a specialized sub-task to another employee on the team.
             Available employees: Alex (Day Planner & Schedule), Morgan (Freelance & BizDev),
-            Taylor (Marketing & Growth), Elena (High-Empathy Writing & Manuscripts).
+            Taylor (Marketing & Growth), Elena (High-Empathy Writing & Manuscripts),
+            Jack (Software Engineering & GitHub Copilot).
             """
             if not self.roster:
                 return f"Error: No roster connected to delegate to {target_employee}"
@@ -83,11 +84,11 @@ class Employee:
 
         spec = ToolSpec(
             name="delegate_task",
-            description="Delegate a specialized sub-task to another employee on the team (Alex, Morgan, Taylor, Elena).",
+            description="Delegate a specialized sub-task to another employee on the team (Alex, Morgan, Taylor, Elena, Jack).",
             parameters={
                 "type": "object",
                 "properties": {
-                    "target_employee": {"type": "string", "description": "Name of the employee (e.g. Alex, Morgan, Taylor, Elena)"},
+                    "target_employee": {"type": "string", "description": "Name of the employee (e.g. Alex, Morgan, Taylor, Elena, Jack)"},
                     "instruction": {"type": "string", "description": "Clear, detailed instruction for what the employee should produce"},
                 },
                 "required": ["target_employee", "instruction"],

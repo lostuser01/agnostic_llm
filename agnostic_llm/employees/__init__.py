@@ -6,6 +6,7 @@ from .morgan import create_morgan
 from .taylor import create_taylor
 from .elena import create_elena
 from .supervisor import create_supervisor
+from .jack import create_jack
 
 __all__ = [
     "Employee",
@@ -16,5 +17,6 @@ __all__ = [
     "create_taylor",
     "create_elena",
     "create_supervisor",
+    "create_jack",
 ]
 

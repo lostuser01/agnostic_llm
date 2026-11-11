@@ -9,6 +9,7 @@ from .morgan import create_morgan
 from .taylor import create_taylor
 from .elena import create_elena
 from .supervisor import create_supervisor
+from .jack import create_jack
 from ..registry import Models
 from ..macos import MacOSStore
 
@@ -31,6 +32,7 @@ class EmployeeRoster:
             create_morgan(self.store),
             create_taylor(self.store),
             create_elena(self.store),
+            create_jack(self.store),
             create_supervisor(self.store),
         ]
         for emp in core:
@@ -86,7 +88,19 @@ class EmployeeRoster:
         # Check for custom employees in config
         custom_emps = models.cfg.get("employees", {})
         for name, spec in custom_emps.items():
-            emp = Employee(
+            existing = roster.get(name)
+            if existing:
+                # Preserve specialized tools/personas while allowing config to
+                # customize presentation and model routing.
+                existing.title = spec.get("title", existing.title)
+                existing.role = spec.get("role", existing.role)
+                existing.route = spec.get("route", existing.route)
+                existing.voice = spec.get("voice", existing.voice)
+                existing.avatar = spec.get("avatar", existing.avatar)
+                if spec.get("system_prompt"):
+                    existing.system_prompt = spec["system_prompt"]
+                continue
+            roster.add(Employee(
                 name=spec.get("name", name.capitalize()),
                 title=spec.get("title", f"{name.capitalize()} Specialist"),
                 role=spec.get("role", "Specialist Assistant"),
@@ -95,8 +109,10 @@ class EmployeeRoster:
                 avatar=spec.get("avatar", "🤖"),
                 system_prompt=spec.get("system_prompt", ""),
                 store=roster.store,
-            )
-            roster.add(emp)
+            ))
+
+        # Rebind after config overrides routes on built-in specialists.
+        roster.bind_models(models)
 
         return roster
 

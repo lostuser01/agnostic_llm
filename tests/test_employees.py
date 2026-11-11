@@ -1,6 +1,12 @@
 import pytest
 from agnostic_llm.employees import (
-    EmployeeRoster, create_alex, create_morgan, create_taylor, create_elena, create_supervisor
+    EmployeeRoster,
+    create_alex,
+    create_morgan,
+    create_taylor,
+    create_elena,
+    create_supervisor,
+    create_jack,
 )
 from agnostic_llm.providers.mock import MockLLM
 from agnostic_llm.macos import MacOSStore
@@ -118,4 +124,23 @@ def test_supervisor_standup_and_delegation(store):
 
     res = supervisor.chat("Get me a $15,000 proposal from Morgan")
     assert "Morgan has finalized the $15,000 pitch" in res.text
+
+
+def test_jack_coding_employee(store):
+    jack = create_jack(store)
+    assert jack.name == "Jack"
+    assert jack.route == "copilot"
+    assert {tool.name for tool in jack.tools} >= {
+        "inspect_repository",
+        "run_project_tests",
+        "delegate_task",
+    }
+
+
+def test_config_preserves_specialized_employees(store):
+    roster = EmployeeRoster.from_config("config.yaml", store=store)
+    jack = roster.get("jack")
+    assert jack is not None
+    assert jack.route == "copilot"
+    assert "run_project_tests" in {tool.name for tool in jack.tools}
 

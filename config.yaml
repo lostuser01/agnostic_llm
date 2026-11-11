@@ -88,6 +88,13 @@ employees:
     route: empathy
     voice: Moira
     avatar: ✍️
+  jack:
+    name: Jack
+    title: Software Engineering Lead
+    role: Coding, debugging, code review, repository maintenance, and test automation
+    route: copilot
+    voice: Alex
+    avatar: 💻
   supervisor:
     name: Supervisor
     title: Team Orchestrator
