@@ -1,0 +1,18 @@
+[project]
+name = "agnostic-llm"
+version = "0.1.0"
+description = "Swap between Claude, GPT, Gemini, and local models without rewriting your app"
+requires-python = ">=3.10"
+dependencies = ["pyyaml"]
+
+[project.optional-dependencies]
+anthropic = ["anthropic"]
+openai = ["openai"]
+all = ["anthropic", "openai"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agnostic_llm", "agnostic_llm.providers"]

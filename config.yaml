@@ -1,0 +1,92 @@
+# Agnostic AI Employee Army Configuration
+# Swap models, routes, voice preferences, and employee personas by editing this file.
+
+models:
+  claude-haiku:
+    provider: anthropic
+    model: claude-3-5-haiku-20241022      # High empathy, fast, low cost
+    api_key_env: ANTHROPIC_API_KEY
+  claude-sonnet:
+    provider: anthropic
+    model: claude-3-7-sonnet-20250219     # Deep nuance & long-form manuscripts
+    api_key_env: ANTHROPIC_API_KEY
+  gpt-4o:
+    provider: openai
+    model: gpt-4o                         # Flagship general reasoning
+    api_key_env: OPENAI_API_KEY
+  gpt-mini:
+    provider: openai
+    model: gpt-4o-mini                    # Fast lightweight helper
+    api_key_env: OPENAI_API_KEY
+  gemini-flash:
+    provider: openai
+    model: gemini-2.0-flash
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+  local:
+    provider: openai
+    model: llama3.2                       # Local Ollama / LM Studio / vLLM
+    base_url: http://localhost:11434/v1
+  mock:
+    provider: mock
+    script:
+      - "I have processed your request, synchronized with your macOS schedule, and updated the workspace."
+
+routes:
+  # Empathetic writing, difficult client emails, negotiations, and book manuscripts
+  empathy: [claude-haiku, claude-sonnet, gpt-4o, gemini-flash, mock]
+  # Fast day planning, calendar management, and quick triage
+  fast: [gemini-flash, gpt-mini, claude-haiku, mock]
+  # Complex strategic planning and high-stakes client deals
+  reasoning: [claude-sonnet, gpt-4o, gemini-flash, mock]
+  # Default balanced route
+  default: [claude-haiku, gpt-mini, gemini-flash, mock]
+  # Offline / free route
+  cheap: [local, gpt-mini, mock]
+
+voice:
+  enabled: true
+  rate: 185
+  voices:
+    alex: Samantha        # macOS en_US clear executive
+    morgan: Daniel        # macOS en_GB sharp negotiator
+    taylor: Karen         # macOS en_AU energetic growth lead
+    elena: Moira          # macOS en_IE warm empathetic resonance
+    supervisor: Samantha
+
+employees:
+  alex:
+    name: Alex
+    title: Chief of Staff & Day Planner
+    role: Day planning, scheduling meetings, calendar defense, and task priorities
+    route: default
+    voice: Samantha
+    avatar: ⏱️
+  morgan:
+    name: Morgan
+    title: Freelance & BizDev Hunter
+    role: Getting freelance clients, pitching, proposal closing, and CRM pipeline
+    route: default
+    voice: Daniel
+    avatar: 💼
+  taylor:
+    name: Taylor
+    title: Growth & Marketing Strategist
+    role: Marketing campaigns, viral hooks, newsletters, and audience building
+    route: default
+    voice: Karen
+    avatar: 🚀
+  elena:
+    name: Elena
+    title: High-Empathy Wordsmith & Author
+    role: Sensitive client emails, empathetic communications, and manuscript writing
+    route: empathy
+    voice: Moira
+    avatar: ✍️
+  supervisor:
+    name: Supervisor
+    title: Team Orchestrator
+    role: Multi-agent coordination, team standups, and task delegation
+    route: default
+    voice: Samantha
+    avatar: 👑
