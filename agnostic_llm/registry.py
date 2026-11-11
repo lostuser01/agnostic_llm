@@ -33,7 +33,17 @@ def _mock(**kw):
     return MockLLM(**kw)
 
 
-PROVIDERS: dict[str, Callable[..., LLM]] = {"anthropic": _anthropic, "openai": _openai, "mock": _mock}
+def _copilot(**kw):
+    from .providers.copilot_provider import CopilotLLM
+    return CopilotLLM(**kw)
+
+
+PROVIDERS: dict[str, Callable[..., LLM]] = {
+    "anthropic": _anthropic,
+    "openai": _openai,
+    "copilot": _copilot,
+    "mock": _mock,
+}
 
 
 def register_provider(name: str, factory: Callable[..., LLM]):

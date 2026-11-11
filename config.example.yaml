@@ -2,6 +2,10 @@
 # Swap models, routes, voice preferences, and employee personas by editing this file.
 
 models:
+  github-copilot:
+    provider: copilot
+    model: gpt-5
+    api_key_env: GITHUB_TOKEN
   claude-haiku:
     provider: anthropic
     model: claude-3-5-haiku-20241022      # High empathy, fast, low cost
@@ -33,14 +37,15 @@ models:
       - "Acknowledged. I have executed the task and updated your macOS dashboard."
 
 routes:
+  copilot: [github-copilot, mock]
   # Empathetic writing, difficult client emails, negotiations, and book manuscripts
-  empathy: [claude-haiku, claude-sonnet, gpt-4o, gemini-flash, mock]
+  empathy: [github-copilot, claude-haiku, claude-sonnet, gpt-4o, gemini-flash, mock]
   # Fast day planning, calendar management, and quick triage
   fast: [gemini-flash, gpt-mini, claude-haiku, mock]
   # Complex strategic planning and high-stakes client deals
   reasoning: [claude-sonnet, gpt-4o, gemini-flash, mock]
   # Default balanced route
-  default: [claude-haiku, gpt-mini, gemini-flash, mock]
+  default: [github-copilot, claude-haiku, gpt-mini, gemini-flash, mock]
   # Offline / free route
   cheap: [local, gpt-mini, mock]
 

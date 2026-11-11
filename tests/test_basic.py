@@ -3,6 +3,7 @@ from agnostic_llm import *
 from agnostic_llm.providers.mock import MockLLM
 from agnostic_llm.providers.anthropic_provider import to_anthropic
 from agnostic_llm.providers.openai_provider import to_openai
+from agnostic_llm.providers.copilot_provider import to_copilot_prompt
 
 TOOL = ToolSpec("add", "d", {"type": "object", "properties": {}}, fn=lambda **k: 5)
 HIST = [Message("system", "be brief"), Message("user", "hi"),
@@ -45,3 +46,14 @@ def test_config_routes():
            "routes": {"default": ["a", "b"]}}
     assert Models(cfg).get("default").ask("x") == "A"
     assert Models(cfg).get("b").ask("x") == "B"
+
+
+def test_copilot_prompt_conversion():
+    prompt, system = to_copilot_prompt([
+        Message("system", "Be concise."),
+        Message("user", "Hello"),
+        Message("assistant", "Hi there"),
+    ])
+    assert system == "Be concise."
+    assert "User: Hello" in prompt
+    assert "Assistant: Hi there" in prompt

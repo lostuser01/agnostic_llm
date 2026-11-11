@@ -6,7 +6,7 @@ Transform single-model scripts into a full-scale, **macOS-supported executive em
 
 ## Requirements
 
-- Python 3.10 or newer
+- Python 3.10 or newer (Python 3.11+ is required for the GitHub Copilot SDK)
 - macOS for native voice, AppleScript, Calendar, Reminders, Mail, notifications, and clipboard integration
 - At least one configured model provider, or the built-in `mock` route for local testing
 - A browser with Web Speech API support (Chrome or Safari) for microphone input
@@ -21,7 +21,7 @@ From the repository root:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[all]"
+python -m pip install -e ".[all,copilot]"
 cp config.example.yaml config.yaml
 ```
 
@@ -31,9 +31,22 @@ Edit `config.yaml` and export the API keys for the providers you want to use:
 export ANTHROPIC_API_KEY="your-anthropic-key"
 export OPENAI_API_KEY="your-openai-key"
 export GEMINI_API_KEY="your-gemini-key"
+export GITHUB_TOKEN="your-github-token"
 ```
 
 Only keys referenced by the routes you use are required. The `mock` provider does not need a key and is useful for testing the UI and tool plumbing.
+
+### GitHub Copilot provider
+
+The `copilot` provider uses GitHub's official `github-copilot-sdk` to run Copilot CLI sessions. Install the project with Python 3.11 or newer, install the Copilot runtime, and authenticate with either a supported `GITHUB_TOKEN` or an existing Copilot CLI login:
+
+```bash
+python -m pip install -e ".[copilot]"
+python -m copilot download-runtime
+gh auth login
+```
+
+The default and employee routes try `github-copilot` first, then fall back to the configured providers. To use a different Copilot model, change `models.github-copilot.model` in `config.yaml`. The SDK supports model names exposed by your Copilot CLI installation, such as `gpt-5`.
 
 ### Launch the dashboard
 
@@ -121,7 +134,7 @@ The test suite uses temporary databases and mock models, so it does not make pai
 
 ## Troubleshooting
 
-- **Provider unavailable:** install the matching optional dependency with `python -m pip install anthropic` or `python -m pip install openai`, then verify the corresponding environment variable.
+- **Provider unavailable:** install the matching optional dependency with `python -m pip install anthropic`, `python -m pip install openai`, or `python -m pip install -e ".[copilot]"`; then verify the corresponding environment variable or Copilot CLI login.
 - **Dashboard import error:** reinstall the project with `python -m pip install -e ".[all]"`; Starlette and Uvicorn are included in the base dependencies.
 - **No voice output:** confirm that `say` works in Terminal and that the configured voice is installed. Voice output is macOS-only.
 - **No microphone input:** allow browser microphone access and use Chrome or Safari.

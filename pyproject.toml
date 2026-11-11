@@ -12,6 +12,7 @@ agnostic-ai = "agnostic_llm.cli:main"
 anthropic = ["anthropic"]
 openai = ["openai"]
 all = ["anthropic", "openai"]
+copilot = ["github-copilot-sdk"]
 
 [build-system]
 requires = ["setuptools"]
