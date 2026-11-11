@@ -121,7 +121,8 @@ Current Context:
                       "attendees": {"type": "string"}
                   },
                   "required": ["title", "start_time"]},
-                 fn=schedule_meeting),
+                 fn=schedule_meeting, approval_key="calendar.schedule",
+                 approval_description="Create an event in the local store and Apple Calendar"),
         ToolSpec("create_task", "Create a new task or reminder with priority and due date.",
                  {"type": "object",
                   "properties": {
@@ -131,7 +132,8 @@ Current Context:
                       "category": {"type": "string"}
                   },
                   "required": ["title"]},
-                 fn=create_task),
+                 fn=create_task, approval_key="tasks.create",
+                 approval_description="Create a task in the local store and Apple Reminders"),
         ToolSpec("list_tasks", "List current tasks filtered by status and category.",
                  {"type": "object",
                   "properties": {
@@ -143,7 +145,8 @@ Current Context:
                  {"type": "object",
                   "properties": {"task_id_or_title": {"type": "string"}},
                   "required": ["task_id_or_title"]},
-                 fn=complete_task),
+                 fn=complete_task, approval_key="tasks.complete",
+                 approval_description="Mark a task complete in the local task store"),
         ToolSpec("plan_my_day", "Generate an optimized daily time-blocking schedule and copy to clipboard.",
                  {"type": "object",
                   "properties": {

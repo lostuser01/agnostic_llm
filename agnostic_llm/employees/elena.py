@@ -116,7 +116,8 @@ Chapter Architecture:
                       "outline": {"type": "string"}
                   },
                   "required": ["title"]},
-                 fn=draft_manuscript_chapter),
+                 fn=draft_manuscript_chapter, approval_key="manuscript.chapter.save",
+                 approval_description="Save a manuscript chapter to the local workspace"),
         ToolSpec("outline_book", "Generate a comprehensive book manuscript outline with chapter arcs.",
                  {"type": "object",
                   "properties": {
@@ -126,7 +127,8 @@ Chapter Architecture:
                       "chapter_count": {"type": "integer"}
                   },
                   "required": ["theme", "premise"]},
-                 fn=outline_book),
+                 fn=outline_book, approval_key="manuscript.outline.save",
+                 approval_description="Save a manuscript outline to the local workspace"),
         ToolSpec("analyze_sentiment_and_intent", "Decode hidden subtext, emotional anxieties, and ego triggers in client emails.",
                  {"type": "object",
                   "properties": {"incoming_message": {"type": "string"}},
@@ -140,7 +142,8 @@ Chapter Architecture:
                       "body": {"type": "string"}
                   },
                   "required": ["recipient", "subject", "body"]},
-                 fn=draft_email_macos),
+                 fn=draft_email_macos, approval_key="email.draft.create",
+                 approval_description="Copy an email draft and open it in Apple Mail"),
     ]
 
     prompt = """You are Elena, High-Empathy Wordsmith & Manuscript Author.

@@ -10,6 +10,7 @@ from ..base import LLM
 from ..types import Message, ToolSpec, ToolCall
 from ..agent import run_agent
 from ..macos import MacOSStore
+from ..security import ApprovalRequired, SecurityStore
 
 if TYPE_CHECKING:
     from .roster import EmployeeRoster
@@ -53,6 +54,7 @@ class Employee:
         self.tools: list[ToolSpec] = list(tools or [])
         self.llm = llm
         self.store = store or MacOSStore()
+        self.security = SecurityStore(self.store.db_path)
         self.roster = roster
         self._history: list[Message] = []
 
@@ -109,6 +111,21 @@ class Employee:
     def recall(self, key: Optional[str] = None) -> list[dict]:
         return self.store.recall(self.name, key)
 
+    def _check_tool_approval(self, spec: ToolSpec, call: ToolCall):
+        if not spec.approval_key:
+            return
+        decision = self.security.get_approval(spec.approval_key)
+        if decision == "allow":
+            self.security.audit(self.name, "tool.approved", spec.approval_key, call.arguments)
+            return
+        if decision == "deny":
+            self.security.audit(self.name, "tool.denied", spec.approval_key, call.arguments)
+            raise PermissionError(f"Tool action denied by approval policy: {spec.approval_key}")
+        request_id = self.security.create_approval_request(
+            self.name, spec.approval_key, {"arguments": call.arguments, "description": spec.approval_description}
+        )
+        raise ApprovalRequired(request_id, spec.approval_key, call.arguments)
+
     def chat(
         self,
         prompt: str,
@@ -144,6 +161,7 @@ class Employee:
             tools=self.tools,
             system=full_system,
             max_steps=max_steps,
+            approval_checker=self._check_tool_approval,
             **opts
         )
 

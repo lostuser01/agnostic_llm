@@ -55,6 +55,15 @@ class SecurityStore:
                     decision TEXT NOT NULL,
                     updated_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS approval_requests (
+                    id TEXT PRIMARY KEY,
+                    actor TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    details TEXT DEFAULT '{}',
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at INTEGER NOT NULL,
+                    resolved_at INTEGER
+                );
                 """
             )
 
@@ -139,6 +148,60 @@ class SecurityStore:
                 "SELECT action, decision, updated_at FROM approval_policies ORDER BY action"
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def create_approval_request(self, actor: str, action: str, details: dict | None = None) -> str:
+        request_id = secrets.token_urlsafe(18)
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO approval_requests (id, actor, action, details, created_at) VALUES (?, ?, ?, ?, ?)",
+                (request_id, actor, action, json.dumps(details or {}), int(time.time())),
+            )
+        return request_id
+
+    def list_pending_approvals(self) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, actor, action, details, created_at FROM approval_requests "
+                "WHERE status = 'pending' ORDER BY created_at ASC"
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["details"] = json.loads(item["details"])
+            result.append(item)
+        return result
+
+    def resolve_approval(self, request_id: str, decision: str, remember: bool = True) -> bool:
+        if decision not in {"allow", "deny"}:
+            raise ValueError("approval decision must be allow or deny")
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT action FROM approval_requests WHERE id = ? AND status = 'pending'",
+                (request_id,),
+            ).fetchone()
+            if not row:
+                return False
+            conn.execute(
+                "UPDATE approval_requests SET status = ?, resolved_at = ? WHERE id = ?",
+                (decision, now, request_id),
+            )
+            if remember:
+                conn.execute(
+                    "INSERT OR REPLACE INTO approval_policies VALUES (?, ?, ?)",
+                    (row["action"], decision, now),
+                )
+        return True
+
+
+class ApprovalRequired(Exception):
+    """Raised when a tool needs an explicit user decision before execution."""
+
+    def __init__(self, request_id: str, action: str, details: dict):
+        super().__init__(f"Approval required for {action} (request {request_id})")
+        self.request_id = request_id
+        self.action = action
+        self.details = details
 
 
 def github_authorize_url(state: str) -> str:

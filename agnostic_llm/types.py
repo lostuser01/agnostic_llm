@@ -14,6 +14,8 @@ class ToolSpec:
     description: str
     parameters: dict  # JSON Schema for the arguments
     fn: Callable[..., Any] | None = None
+    approval_key: str | None = None
+    approval_description: str = ""
 
 
 def tool(fn: Callable) -> ToolSpec:

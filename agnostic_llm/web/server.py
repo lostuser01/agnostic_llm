@@ -17,7 +17,7 @@ import uvicorn
 from ..employees import EmployeeRoster
 from ..voice import voice_engine
 from ..macos import MacOSStore, copy_to_clipboard, get_clipboard
-from ..security import SecurityStore, exchange_github_code, github_authorize_url
+from ..security import ApprovalRequired, SecurityStore, exchange_github_code, github_authorize_url
 
 log = logging.getLogger("agnostic_llm.web")
 
@@ -87,6 +87,21 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         session = security.get_session(request.cookies.get("agnostic_session"))
         return JSONResponse({"authenticated": bool(session), "user": session})
 
+    async def get_approvals(request: Request):
+        return JSONResponse({"approvals": security.list_pending_approvals(), "policies": security.list_approvals()})
+
+    async def resolve_approval(request: Request):
+        data = await request.json()
+        ok = security.resolve_approval(
+            str(data.get("id", "")),
+            data.get("decision", "deny"),
+            bool(data.get("remember", True)),
+        )
+        session = security.get_session(request.cookies.get("agnostic_session"))
+        if session:
+            security.audit(session["login"], "approval.resolve", str(data.get("id", "")), data)
+        return JSONResponse({"success": ok}, status_code=200 if ok else 404)
+
     async def get_employees(request: Request):
         emps = []
         for e in roster.list_all():
@@ -133,6 +148,14 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
                 "tool_calls": tool_calls_data,
                 "voice": emp.voice,
             })
+        except ApprovalRequired as exc:
+            return JSONResponse({
+                "success": False,
+                "error": "approval_required",
+                "request_id": exc.request_id,
+                "action": exc.action,
+                "details": exc.details,
+            }, status_code=409)
         except Exception as e:
             log.exception("Chat execution error: %s", e)
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -263,6 +286,8 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         Route("/auth/callback", endpoint=auth_callback, methods=["GET"]),
         Route("/auth/logout", endpoint=auth_logout, methods=["GET"]),
         Route("/api/me", endpoint=current_user, methods=["GET"]),
+        Route("/api/approvals", endpoint=get_approvals, methods=["GET"]),
+        Route("/api/approvals/resolve", endpoint=resolve_approval, methods=["POST"]),
         Route("/api/employees", endpoint=get_employees, methods=["GET"]),
         Route("/api/chat", endpoint=chat_handler, methods=["POST"]),
         Route("/api/agenda", endpoint=get_agenda, methods=["GET"]),

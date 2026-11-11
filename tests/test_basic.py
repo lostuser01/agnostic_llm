@@ -4,7 +4,7 @@ from agnostic_llm.providers.mock import MockLLM
 from agnostic_llm.providers.anthropic_provider import to_anthropic
 from agnostic_llm.providers.openai_provider import to_openai
 from agnostic_llm.providers.copilot_provider import to_copilot_prompt
-from agnostic_llm.security import SecurityStore
+from agnostic_llm.security import ApprovalRequired, SecurityStore
 
 TOOL = ToolSpec("add", "d", {"type": "object", "properties": {}}, fn=lambda **k: 5)
 HIST = [Message("system", "be brief"), Message("user", "hi"),
@@ -69,3 +69,36 @@ def test_security_store_sessions_and_approvals(tmp_path):
     assert security.get_session(token)["login"] == "tester"
     security.set_approval("calendar.schedule", "allow")
     assert security.get_approval("calendar.schedule") == "allow"
+
+
+def test_sensitive_tool_requires_and_remembers_approval(tmp_path):
+    security = SecurityStore(tmp_path / "approval.db")
+    called = []
+    tool = ToolSpec(
+        "publish",
+        "Publish content",
+        {"type": "object", "properties": {}},
+        fn=lambda: called.append(True) or "published",
+        approval_key="content.publish",
+    )
+    model = MockLLM([
+        LLMResponse(tool_calls=[ToolCall("publish-1", "publish", {})], stop_reason="tool_calls"),
+        "done",
+    ])
+
+    def check(spec, call):
+        if security.get_approval(spec.approval_key) != "allow":
+            request_id = security.create_approval_request("tester", spec.approval_key, call.arguments)
+            raise ApprovalRequired(request_id, spec.approval_key, call.arguments)
+
+    with pytest.raises(ApprovalRequired):
+        run_agent(model, "publish", [tool], approval_checker=check)
+    assert called == []
+    request_id = security.list_pending_approvals()[0]["id"]
+    assert security.resolve_approval(request_id, "allow", remember=True)
+    approved_model = MockLLM([
+        LLMResponse(tool_calls=[ToolCall("publish-2", "publish", {})], stop_reason="tool_calls"),
+        "done",
+    ])
+    assert run_agent(approved_model, "publish", [tool], approval_checker=check)[0] == "done"
+    assert called == [True]
