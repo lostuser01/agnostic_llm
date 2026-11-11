@@ -2,12 +2,14 @@
 from __future__ import annotations
 import json
 import logging
+import os
 from pathlib import Path
 from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, FileResponse
+from starlette.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from starlette.routing import Route, Mount
 from starlette.staticfiles import StaticFiles
 import uvicorn
@@ -15,6 +17,7 @@ import uvicorn
 from ..employees import EmployeeRoster
 from ..voice import voice_engine
 from ..macos import MacOSStore, copy_to_clipboard, get_clipboard
+from ..security import SecurityStore, exchange_github_code, github_authorize_url
 
 log = logging.getLogger("agnostic_llm.web")
 
@@ -23,6 +26,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 def create_app(config_path: str = "config.yaml") -> Starlette:
     store = MacOSStore()
+    security = SecurityStore(store.db_path)
+    auth_required = os.environ.get("AGNOSTIC_AUTH_REQUIRED", "1") != "0"
     try:
         roster = EmployeeRoster.from_config(config_path, store=store)
     except Exception as e:
@@ -34,6 +39,53 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         if index_file.exists():
             return FileResponse(index_file)
         return HTMLResponse("<h1>Agnostic AI: macOS Employee Suite</h1>")
+
+    async def auth_login(request: Request):
+        if not os.environ.get("GITHUB_OAUTH_CLIENT_ID"):
+            return HTMLResponse(
+                "<h1>GitHub OAuth is not configured</h1>"
+                "<p>Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET.</p>",
+                status_code=503,
+            )
+        state = security.create_oauth_state()
+        return RedirectResponse(github_authorize_url(state), status_code=303)
+
+    async def auth_callback(request: Request):
+        state = request.query_params.get("state", "")
+        code = request.query_params.get("code", "")
+        if not state or not security.consume_oauth_state(state):
+            return HTMLResponse("<h1>Invalid or expired OAuth state</h1>", status_code=400)
+        try:
+            user = exchange_github_code(code)
+            token = security.create_session(user["id"], user["login"])
+            security.audit(user["login"], "auth.login")
+            response = RedirectResponse("/", status_code=303)
+            response.set_cookie(
+                "agnostic_session",
+                token,
+                httponly=True,
+                samesite="lax",
+                secure=request.url.scheme == "https",
+                max_age=86400,
+            )
+            return response
+        except Exception as exc:
+            log.exception("GitHub OAuth callback failed")
+            return HTMLResponse(f"<h1>Authentication failed</h1><p>{exc}</p>", status_code=502)
+
+    async def auth_logout(request: Request):
+        token = request.cookies.get("agnostic_session")
+        session = security.get_session(token)
+        if session:
+            security.audit(session["login"], "auth.logout")
+        security.revoke_session(token)
+        response = RedirectResponse("/", status_code=303)
+        response.delete_cookie("agnostic_session")
+        return response
+
+    async def current_user(request: Request):
+        session = security.get_session(request.cookies.get("agnostic_session"))
+        return JSONResponse({"authenticated": bool(session), "user": session})
 
     async def get_employees(request: Request):
         emps = []
@@ -57,6 +109,8 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
         emp = roster.get(emp_name) or roster.get("supervisor")
         try:
+            session = security.get_session(request.cookies.get("agnostic_session"))
+            security.audit(session["login"] if session else "anonymous", "employee.chat", emp.name)
             res = emp.chat(prompt)
             # Spoken voice output via macOS say if requested
             if voice_out:
@@ -205,6 +259,10 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     routes = [
         Route("/", endpoint=index, methods=["GET"]),
+        Route("/auth/login", endpoint=auth_login, methods=["GET"]),
+        Route("/auth/callback", endpoint=auth_callback, methods=["GET"]),
+        Route("/auth/logout", endpoint=auth_logout, methods=["GET"]),
+        Route("/api/me", endpoint=current_user, methods=["GET"]),
         Route("/api/employees", endpoint=get_employees, methods=["GET"]),
         Route("/api/chat", endpoint=chat_handler, methods=["POST"]),
         Route("/api/agenda", endpoint=get_agenda, methods=["GET"]),
@@ -225,7 +283,19 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         Mount("/static", app=StaticFiles(directory=str(STATIC_DIR)), name="static"),
     ]
 
+    class AuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            public = request.url.path.startswith("/auth/") or request.url.path.startswith("/static/")
+            if auth_required and not public:
+                session = security.get_session(request.cookies.get("agnostic_session"))
+                if not session:
+                    if request.url.path.startswith("/api/"):
+                        return JSONResponse({"success": False, "error": "authentication_required"}, status_code=401)
+                    return RedirectResponse("/auth/login", status_code=303)
+            return await call_next(request)
+
     middleware = [
+        Middleware(AuthMiddleware),
         Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
     ]
 

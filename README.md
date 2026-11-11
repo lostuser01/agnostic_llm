@@ -63,6 +63,19 @@ python3 -m agnostic_llm --web --port 8000
 
 Open <http://127.0.0.1:8000> if it does not open automatically. You can also double-click `AgnosticAI.command` in Finder.
 
+For the production-style local dashboard, create a GitHub OAuth App with callback URL
+`http://127.0.0.1:8000/auth/callback`, then configure:
+
+```bash
+export GITHUB_OAUTH_CLIENT_ID="..."
+export GITHUB_OAUTH_CLIENT_SECRET="..."
+export GITHUB_OAUTH_REDIRECT_URI="http://127.0.0.1:8000/auth/callback"
+```
+
+The dashboard then requires GitHub login, stores only a hashed session token locally,
+and records authentication and employee actions in the SQLite audit log. Set
+`AGNOSTIC_AUTH_REQUIRED=0` only for isolated development without OAuth.
+
 ### Use the terminal assistant
 
 ```bash

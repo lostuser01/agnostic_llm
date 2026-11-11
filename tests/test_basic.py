@@ -4,6 +4,7 @@ from agnostic_llm.providers.mock import MockLLM
 from agnostic_llm.providers.anthropic_provider import to_anthropic
 from agnostic_llm.providers.openai_provider import to_openai
 from agnostic_llm.providers.copilot_provider import to_copilot_prompt
+from agnostic_llm.security import SecurityStore
 
 TOOL = ToolSpec("add", "d", {"type": "object", "properties": {}}, fn=lambda **k: 5)
 HIST = [Message("system", "be brief"), Message("user", "hi"),
@@ -57,3 +58,14 @@ def test_copilot_prompt_conversion():
     assert system == "Be concise."
     assert "User: Hello" in prompt
     assert "Assistant: Hi there" in prompt
+
+
+def test_security_store_sessions_and_approvals(tmp_path):
+    security = SecurityStore(tmp_path / "security.db")
+    state = security.create_oauth_state()
+    assert security.consume_oauth_state(state)
+    assert not security.consume_oauth_state(state)
+    token = security.create_session("123", "tester")
+    assert security.get_session(token)["login"] == "tester"
+    security.set_approval("calendar.schedule", "allow")
+    assert security.get_approval("calendar.schedule") == "allow"
