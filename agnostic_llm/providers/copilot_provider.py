@@ -14,7 +14,7 @@ from typing import Any
 from ..base import LLM
 from ..types import LLMResponse, Message, ToolSpec, map_exception
 from ..macos import DB_PATH
-from ..security import SecurityStore
+from ..security import SecurityStore, validate_shell_command
 
 
 def to_copilot_prompt(messages: list[Message]) -> tuple[str, str | None]:
@@ -106,6 +106,16 @@ class CopilotLLM(LLM):
             "command": getattr(request, "full_command_text", ""),
             "working_directory": getattr(request, "resolved_working_directory", self.working_directory),
         }
+        if kind == "shell":
+            command = str(getattr(request, "full_command_text", ""))
+            safe, reasons = validate_shell_command(command)
+            if not safe:
+                self.security.audit("copilot", "permission.blocked", "copilot.shell", {
+                    **details, "reasons": reasons,
+                })
+                return PermissionDecisionReject(
+                    feedback="Command blocked by local security policy: " + "; ".join(reasons)
+                )
         action = f"copilot.{kind}"
         decision = self.security.get_approval(action)
         if decision == "allow":

@@ -4,13 +4,70 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
+import shlex
 import sqlite3
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+
+SECRET_PATTERNS = (
+    re.compile(r"(?i)\b(?:api[_-]?key|secret|token|password|passwd)\s*=\s*[\"']?[^ \t\"']{8,}"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+)
+
+BLOCKED_COMMANDS = {
+    "rm",
+    "rmdir",
+    "mkfs",
+    "shutdown",
+    "reboot",
+    "halt",
+    "poweroff",
+    "sudo",
+    "su",
+    "chmod",
+    "chown",
+    "launchctl",
+    "curl",
+    "wget",
+    "nc",
+    "netcat",
+}
+
+
+def scan_for_secrets(value: str) -> list[str]:
+    """Return names of secret patterns detected in a command or text."""
+    findings = []
+    labels = ("credential_assignment", "github_token", "api_token", "private_key")
+    for label, pattern in zip(labels, SECRET_PATTERNS):
+        if pattern.search(value):
+            findings.append(label)
+    return findings
+
+
+def validate_shell_command(command: str) -> tuple[bool, list[str]]:
+    """Validate a Copilot shell command against destructive and secret policies."""
+    reasons = []
+    if scan_for_secrets(command):
+        reasons.append("secret-like value detected")
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False, ["malformed shell quoting"]
+    for token in tokens:
+        executable = Path(token).name
+        if executable in BLOCKED_COMMANDS:
+            reasons.append(f"blocked executable: {executable}")
+    if any(fragment in command for fragment in ("| bash", "| sh", "|bash", "|sh", ">/dev/", "2>/dev/")):
+        reasons.append("shell piping or device redirection is blocked")
+    return not reasons, reasons
 
 
 class SecurityStore:

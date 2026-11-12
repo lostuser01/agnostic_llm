@@ -4,7 +4,12 @@ from agnostic_llm.providers.mock import MockLLM
 from agnostic_llm.providers.anthropic_provider import to_anthropic
 from agnostic_llm.providers.openai_provider import to_openai
 from agnostic_llm.providers.copilot_provider import to_copilot_prompt
-from agnostic_llm.security import ApprovalRequired, SecurityStore
+from agnostic_llm.security import (
+    ApprovalRequired,
+    SecurityStore,
+    scan_for_secrets,
+    validate_shell_command,
+)
 
 TOOL = ToolSpec("add", "d", {"type": "object", "properties": {}}, fn=lambda **k: 5)
 HIST = [Message("system", "be brief"), Message("user", "hi"),
@@ -113,3 +118,12 @@ def test_workspace_allowlist(tmp_path):
     security.allow_workspace(str(workspace))
     assert security.is_workspace_allowed(str(workspace / "src" / "main.py"))
     assert not security.is_workspace_allowed(str(outside / "secret.txt"))
+
+
+def test_command_policy_blocks_dangerous_commands_and_secrets():
+    assert validate_shell_command("python -m pytest -q")[0]
+    allowed, reasons = validate_shell_command("rm -rf build")
+    assert not allowed and any("rm" in reason for reason in reasons)
+    allowed, reasons = validate_shell_command("python app.py --api-key=sk-123456789012345678901")
+    assert not allowed and "secret-like value detected" in reasons
+    assert "github_token" in scan_for_secrets("export GH_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz")

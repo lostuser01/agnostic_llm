@@ -8,6 +8,7 @@ from typing import Optional
 from .base import Employee
 from ..macos import MacOSStore
 from ..security import SecurityStore
+from ..security import validate_shell_command
 from ..types import ToolSpec
 
 
@@ -44,6 +45,9 @@ def create_jack(store: Optional[MacOSStore] = None) -> Employee:
         """Run the repository's pytest suite and return its output."""
         if not security.is_workspace_allowed(str(workspace_root)):
             return f"Workspace is not allowlisted: {workspace_root}"
+        safe, reasons = validate_shell_command("python -m pytest -q")
+        if not safe:
+            return f"Test command blocked by security policy: {'; '.join(reasons)}"
         try:
             result = subprocess.run(
                 ["python", "-m", "pytest", "-q"],
