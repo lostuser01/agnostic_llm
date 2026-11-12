@@ -1,0 +1,28 @@
+# Non-secret integration settings. Put secret values in environment variables
+# or macOS Keychain; never add tokens to this file.
+
+integrations:
+  browser:
+    provider: disabled
+    allowed_domains:
+      - example-search-provider.com
+    credential_env: BROWSER_API_KEY
+
+  github:
+    provider: disabled
+    credential_env: GITHUB_INTEGRATION_TOKEN
+
+  calendar:
+    provider: local
+    oauth_scopes:
+      - calendar.events
+
+  email:
+    provider: disabled
+    oauth_scopes:
+      - mail.send
+      - mail.read
+
+  social:
+    provider: disabled
+    platforms: []

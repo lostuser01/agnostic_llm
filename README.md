@@ -215,6 +215,42 @@ routes:
   default: [claude-haiku, gpt-4o, gemini-flash, mock]
 ```
 
+### Where to put integration APIs and credentials
+
+Use these files and locations:
+
+| Purpose | Location |
+|---|---|
+| Secret variable template | `.env.example` |
+| Your local secrets | `.env.local` (never commit) |
+| Non-secret integration settings | `config/integrations.example.yaml`, copied to `config/integrations.yaml` |
+| Integration contracts/adapters | `agnostic_llm/integrations/` |
+| Local database and audit state | `.data/data.db` or `~/.agnostic_llm/data.db` |
+
+Create your local environment file and load it before starting the app:
+
+```bash
+cp .env.example .env.local
+chmod 600 .env.local
+# Edit .env.local and add your real values.
+set -a; source .env.local; set +a
+agnostic-ai --web --port 8000
+```
+
+For macOS Keychain storage, use the same credential names without putting values
+in a file:
+
+```bash
+security add-generic-password -U -s agnostic-llm -a LINKEDIN_CLIENT_SECRET -w 'YOUR_VALUE'
+```
+
+The current employee integrations are intentionally disabled/local by default.
+After choosing a real provider, set its `provider` and `allowed_domains` in
+`config/integrations.yaml`, then inject its adapter into the employee factory.
+The repository does not yet include platform-specific OAuth adapters for every
+social network; those require the corresponding app registrations, redirect URLs,
+scopes, and API terms for each platform.
+
 ---
 
 ## 💻 Python Library Usage
