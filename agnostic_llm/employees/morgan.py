@@ -8,10 +8,16 @@ from typing import Optional
 from .base import Employee
 from ..types import ToolSpec
 from ..macos import MacOSStore, copy_to_clipboard, send_macos_notification
+from ..integrations import BrowserResearchProvider, DisabledBrowserResearchProvider, IntegrationNotConfigured
+from ..integrations import ResearchResult
 
 
-def create_morgan(store: Optional[MacOSStore] = None) -> Employee:
+def create_morgan(
+    store: Optional[MacOSStore] = None,
+    research_provider: BrowserResearchProvider | None = None,
+) -> Employee:
     store = store or MacOSStore()
+    research_provider = research_provider or DisabledBrowserResearchProvider()
 
     def add_lead(
         client_name: str,
@@ -117,6 +123,25 @@ Best regards,
 """
         return strategy.strip()
 
+    def research_web(query: str, max_results: int = 5) -> str:
+        """Perform read-only web research through the configured browser provider."""
+        try:
+            results = research_provider.search(query, max_results=max_results)
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        if not results:
+            return f"No research results found for '{query}'."
+        return "\n".join(f"• {item.title} — {item.url}\n  {item.snippet}" for item in results)
+
+    def enrich_lead_from_web(company: str, context: str = "") -> str:
+        """Enrich a lead with read-only public web research; never contacts the lead."""
+        try:
+            result = research_provider.enrich_lead(company, context)
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        sources = ", ".join(result.sources) if result.sources else "none"
+        return f"Lead enrichment for {result.company}:\n{result.summary}\nSources: {sources}"
+
     tools = [
         ToolSpec("add_lead", "Record a new prospective client in the CRM pipeline.",
                  {"type": "object",
@@ -174,6 +199,13 @@ Best regards,
                   },
                   "required": ["niche", "skills"]},
                  fn=find_client_targets),
+        ToolSpec("research_web", "Read-only web research for market and prospect discovery.",
+                  {"type": "object", "properties": {"query": {"type": "string"}, "max_results": {"type": "integer"}}},
+                  fn=research_web),
+        ToolSpec("enrich_lead_from_web", "Enrich a prospective lead from public web sources without contacting them.",
+                  {"type": "object", "properties": {"company": {"type": "string"}, "context": {"type": "string"}},
+                   "required": ["company"]},
+                  fn=enrich_lead_from_web),
     ]
 
     prompt = """You are Morgan, Business Development & Freelance Hunter.

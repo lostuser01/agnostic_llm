@@ -102,3 +102,18 @@ employees:
     route: default
     voice: Samantha
     avatar: 👑
+
+# External integrations are opt-in. Keep credential values out of this file;
+# use the named environment variables or macOS Keychain entries instead.
+integrations:
+  browser:
+    allowed_domains: []
+    credential_env: BROWSER_API_KEY
+  github:
+    credential_env: GITHUB_TOKEN
+  calendar:
+    provider: local
+  email:
+    provider: disabled
+  social:
+    provider: disabled

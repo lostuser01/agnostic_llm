@@ -54,3 +54,11 @@ def test_notification_fallback():
     res = send_macos_notification("Test Title", "Test Message")
     assert isinstance(res, bool)
 
+
+def test_database_backup_is_consistent(store, tmp_path):
+    store.create_task(title="Backup me")
+    destination = store.backup_database(tmp_path / "backups" / "snapshot.db")
+    backup = MacOSStore(destination)
+    assert backup.list_tasks()[0]["title"] == "Backup me"
+    assert destination.exists()
+

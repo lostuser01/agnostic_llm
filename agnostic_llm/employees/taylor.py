@@ -8,10 +8,18 @@ from typing import Optional
 from .base import Employee
 from ..types import ToolSpec
 from ..macos import MacOSStore, copy_to_clipboard, send_macos_notification
+from ..integrations import (
+    SocialPublishingProvider, DisabledSocialPublishingProvider, SocialPost,
+    IntegrationNotConfigured,
+)
 
 
-def create_taylor(store: Optional[MacOSStore] = None) -> Employee:
+def create_taylor(
+    store: Optional[MacOSStore] = None,
+    social_provider: SocialPublishingProvider | None = None,
+) -> Employee:
     store = store or MacOSStore()
+    social_provider = social_provider or DisabledSocialPublishingProvider()
 
     def generate_social_campaign(topic: str, target_audience: str, platform: str = "linkedin") -> str:
         """Create a multi-post social media campaign tailored to the target audience and platform."""
@@ -101,6 +109,22 @@ Until next week,
             schedule.append(f"• {d}: [{channel}] {theme} in {niche}")
         return "\n".join(schedule)
 
+    def publish_social_post(platform: str, content: str, scheduled_for: str = "") -> str:
+        """Publish only after the approval gate has been satisfied."""
+        try:
+            post = social_provider.publish(SocialPost(platform, content, scheduled_for))
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        return f"Published {post.platform} post (provider ID: {post.provider_id or 'unknown'})."
+
+    def get_social_analytics(platform: str, post_id: str = "") -> str:
+        """Read analytics from the configured social provider."""
+        try:
+            data = social_provider.analytics(platform, post_id)
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        return f"{data.platform} analytics: {data.impressions} impressions, {data.engagements} engagements, {data.clicks} clicks."
+
     tools = [
         ToolSpec("generate_social_campaign", "Generate multi-post social media campaigns for LinkedIn/X.",
                  {"type": "object",
@@ -135,6 +159,16 @@ Until next week,
                   },
                   "required": ["niche"]},
                  fn=build_content_calendar),
+        ToolSpec("publish_social_post", "Publish an approved post through the configured social provider.",
+                  {"type": "object", "properties": {
+                      "platform": {"type": "string"}, "content": {"type": "string"}, "scheduled_for": {"type": "string"}
+                  }, "required": ["platform", "content"]},
+                  fn=publish_social_post, approval_key="social.publish",
+                  approval_description="Publish content to a social platform"),
+        ToolSpec("get_social_analytics", "Read social publishing analytics.",
+                  {"type": "object", "properties": {"platform": {"type": "string"}, "post_id": {"type": "string"}},
+                   "required": ["platform"]},
+                  fn=get_social_analytics),
     ]
 
     prompt = """You are Taylor, Growth & Marketing Strategist.

@@ -164,6 +164,11 @@ class SecurityStore:
             )
         return token
 
+    @staticmethod
+    def create_csrf_token() -> str:
+        """Create a double-submit CSRF token; no server-side session state is needed."""
+        return secrets.token_urlsafe(32)
+
     def get_session(self, token: str | None) -> dict[str, Any] | None:
         if not token:
             return None

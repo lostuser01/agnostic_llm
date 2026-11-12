@@ -9,10 +9,20 @@ from typing import Optional
 from .base import Employee
 from ..types import ToolSpec
 from ..macos import MacOSStore, copy_to_clipboard, open_draft_in_apple_mail, send_macos_notification
+from ..integrations import (
+    EmailProvider, DocumentStorage, DisabledEmailProvider, EmailDraft,
+    IntegrationNotConfigured, LocalDocumentStorage,
+)
 
 
-def create_elena(store: Optional[MacOSStore] = None) -> Employee:
+def create_elena(
+    store: Optional[MacOSStore] = None,
+    email_provider: EmailProvider | None = None,
+    document_storage: DocumentStorage | None = None,
+) -> Employee:
     store = store or MacOSStore()
+    email_provider = email_provider or DisabledEmailProvider()
+    document_storage = document_storage or LocalDocumentStorage(store.db_path.parent / "documents")
 
     def refine_empathetic_tone(text: str, recipient_context: str = "", goal: str = "") -> str:
         """Analyze text and rewrite with deep empathy, psychological warmth, clarity, and constructive boundaries."""
@@ -95,6 +105,27 @@ Chapter Architecture:
         status = "and opened directly in Apple Mail" if opened else "(copied to macOS clipboard)"
         return f"Empathetic email draft ready {status} for {recipient} with subject '{subject}'."
 
+    def draft_email_provider(recipient: str, subject: str, body: str) -> str:
+        """Create a draft through an injected email provider; does not send."""
+        try:
+            draft = email_provider.draft(EmailDraft(recipient, subject, body))
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        return f"Email draft created (provider ID: {draft.provider_id or 'unknown'}) for {recipient}."
+
+    def send_email_provider(recipient: str, subject: str, body: str) -> str:
+        """Send an email through an injected provider after approval."""
+        try:
+            message_id = email_provider.send(EmailDraft(recipient, subject, body))
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        return f"Email sent (provider ID: {message_id})."
+
+    def save_document(name: str, content: str) -> str:
+        """Save a document through the configured document store."""
+        document_id = document_storage.save(name, content, {"employee": "Elena"})
+        return f"Document saved: {document_id}"
+
     tools = [
         ToolSpec("refine_empathetic_tone", "Calibrate and rewrite text with warmth, empathy, and emotional intelligence.",
                  {"type": "object",
@@ -144,6 +175,23 @@ Chapter Architecture:
                   "required": ["recipient", "subject", "body"]},
                  fn=draft_email_macos, approval_key="email.draft.create",
                  approval_description="Copy an email draft and open it in Apple Mail"),
+        ToolSpec("draft_email_provider", "Create an email draft through the configured email provider.",
+                  {"type": "object", "properties": {
+                      "recipient": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}
+                  }, "required": ["recipient", "subject", "body"]},
+                  fn=draft_email_provider, approval_key="email.draft.create",
+                  approval_description="Create an email draft through the configured email provider"),
+        ToolSpec("send_email_provider", "Send an email through the configured email provider.",
+                  {"type": "object", "properties": {
+                      "recipient": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}
+                  }, "required": ["recipient", "subject", "body"]},
+                  fn=send_email_provider, approval_key="email.send",
+                  approval_description="Send an email through the configured email provider"),
+        ToolSpec("save_document", "Save a document through the configured document storage provider.",
+                  {"type": "object", "properties": {"name": {"type": "string"}, "content": {"type": "string"}},
+                   "required": ["name", "content"]},
+                  fn=save_document, approval_key="document.save",
+                  approval_description="Save a document to configured document storage"),
     ]
 
     prompt = """You are Elena, High-Empathy Wordsmith & Manuscript Author.

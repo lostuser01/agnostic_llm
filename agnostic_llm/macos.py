@@ -136,6 +136,26 @@ class MacOSStore:
             """)
             conn.commit()
 
+    def backup_database(self, destination: Path | None = None) -> Path:
+        """Create a consistent SQLite backup without exposing the live database file."""
+        if destination is None:
+            backup_dir = self.db_path.parent / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            destination = backup_dir / f"{self.db_path.stem}-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
+        destination = Path(destination).expanduser()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.resolve() == self.db_path.resolve():
+            raise ValueError("backup destination must differ from the live database")
+        temp_destination = destination.with_name(f".{destination.name}.tmp")
+        try:
+            with self._get_conn() as source, sqlite3.connect(str(temp_destination)) as target:
+                source.backup(target)
+                target.commit()
+            temp_destination.replace(destination)
+        finally:
+            temp_destination.unlink(missing_ok=True)
+        return destination
+
     # --- Calendar Methods ---
     def add_event(self, title: str, start_time: str, duration_minutes: int = 60,
                   location: str = "", notes: str = "", attendees: str = "") -> dict:

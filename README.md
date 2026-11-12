@@ -79,7 +79,12 @@ and records authentication and employee actions in the SQLite audit log. Set
 The dashboard defaults to localhost-only CORS, security headers, and non-debug mode.
 If you intentionally serve it from another local origin, set
 `AGNOSTIC_ALLOWED_ORIGIN` to that exact origin. Dashboard mutations use the same
-remembered approval policies as employee tools.
+remembered approval policies as employee tools, and browser mutations use CSRF
+tokens. Requests are limited to 1 MiB by default and protected by a basic
+in-process rate limiter; customize these with `AGNOSTIC_MAX_BODY_BYTES`,
+`AGNOSTIC_RATE_LIMIT`, and `AGNOSTIC_RATE_WINDOW`. The authenticated
+`POST /api/backup` endpoint creates a consistent SQLite backup under `.data/backups`
+by default and is approval-gated.
 
 ### Use the terminal assistant
 
@@ -135,6 +140,21 @@ The first request may use a fallback model if an earlier provider is unavailable
 - **Local SQLite Persistence**: Persistent storage in `~/.agnostic_llm/data.db` (or `./.data/data.db`) ensures everything works offline, in sandbox, and in production.
 
 The application may ask macOS for permission to control Calendar, Reminders, and Mail. Approve those prompts in **System Settings → Privacy & Security → Automation**. If permissions are denied, local SQLite records still remain available.
+
+## 🔌 Employee provider integrations
+
+`agnostic_llm.integrations.providers` defines dependency-free, mockable contracts
+for Morgan's read-only research/enrichment, Alex's calendar/tasks, Taylor's
+social publishing/analytics, Elena's email/document storage, and Jack's
+GitHub repository/PR/CI operations. Employee factories accept provider
+instances, so tests and deployments can inject adapters without changing the
+agent loop. Defaults are local or disabled and make no external API calls.
+
+Use the existing `EnvironmentCredentialStore` (or macOS Keychain fallback) for
+credentials; never put tokens in YAML, prompts, or provider implementations.
+Publishing, email sending, document writes, pull requests, and CI runs carry
+approval keys and remain blocked until the remembered approval policy permits
+them.
 
 ---
 

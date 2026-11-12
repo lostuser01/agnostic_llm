@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+from collections import defaultdict, deque
 from pathlib import Path
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -22,6 +24,28 @@ from ..security import ApprovalRequired, SecurityStore, exchange_github_code, gi
 log = logging.getLogger("agnostic_llm.web")
 
 STATIC_DIR = Path(__file__).parent / "static"
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+class RequestValidationError(ValueError):
+    pass
+
+
+async def read_json(request: Request) -> dict:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
+    if content_type != "application/json":
+        raise RequestValidationError("content_type_must_be_application_json")
+    try:
+        data = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+        raise RequestValidationError("invalid_json") from exc
+    if not isinstance(data, dict):
+        raise RequestValidationError("json_object_required")
+    return data
+
+
+def validation_response(error: str, status_code: int = 400):
+    return JSONResponse({"success": False, "error": error}, status_code=status_code)
 
 
 def create_app(config_path: str = "config.yaml") -> Starlette:
@@ -29,6 +53,10 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
     security = SecurityStore(store.db_path)
     auth_required = os.environ.get("AGNOSTIC_AUTH_REQUIRED", "1") != "0"
     allowed_origin = os.environ.get("AGNOSTIC_ALLOWED_ORIGIN", "http://127.0.0.1:8000")
+    max_body_bytes = int(os.environ.get("AGNOSTIC_MAX_BODY_BYTES", str(1024 * 1024)))
+    rate_limit = int(os.environ.get("AGNOSTIC_RATE_LIMIT", "120"))
+    rate_window = int(os.environ.get("AGNOSTIC_RATE_WINDOW", "60"))
+    rate_buckets: dict[str, deque[float]] = defaultdict(deque)
     try:
         roster = EmployeeRoster.from_config(config_path, store=store)
     except Exception as e:
@@ -38,8 +66,14 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
     async def index(request: Request):
         index_file = STATIC_DIR / "index.html"
         if index_file.exists():
-            return FileResponse(index_file)
-        return HTMLResponse("<h1>Agnostic AI: macOS Employee Suite</h1>")
+            response = FileResponse(index_file)
+            response.set_cookie("agnostic_csrf", security.create_csrf_token(), httponly=False, samesite="lax",
+                                secure=request.url.scheme == "https", max_age=86400)
+            return response
+        response = HTMLResponse("<h1>Agnostic AI: macOS Employee Suite</h1>")
+        response.set_cookie("agnostic_csrf", security.create_csrf_token(), httponly=False, samesite="lax",
+                            secure=request.url.scheme == "https", max_age=86400)
+        return response
 
     async def auth_login(request: Request):
         if not os.environ.get("GITHUB_OAUTH_CLIENT_ID"):
@@ -92,7 +126,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"approvals": security.list_pending_approvals(), "policies": security.list_approvals()})
 
     async def resolve_approval(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         ok = security.resolve_approval(
             str(data.get("id", "")),
             data.get("decision", "deny"),
@@ -126,7 +160,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"workspaces": security.list_workspaces()})
 
     async def allow_workspace(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         path = str(data.get("path", "")).strip()
         if not path:
             return JSONResponse({"success": False, "error": "path_required"}, status_code=400)
@@ -137,7 +171,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"success": True, "workspaces": security.list_workspaces()})
 
     async def revoke_workspace(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         path = str(data.get("path", "")).strip()
         approval = require_api_approval(request, "workspace.revoke", {"path": path})
         if approval:
@@ -160,7 +194,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"employees": emps})
 
     async def chat_handler(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         emp_name = data.get("employee", "supervisor")
         prompt = data.get("prompt", "")
         voice_out = data.get("voice_out", False)
@@ -211,7 +245,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"events": events, "tasks": tasks})
 
     async def create_event(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         approval = require_api_approval(request, "calendar.schedule", data)
         if approval:
             return approval
@@ -233,7 +267,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"tasks": tasks})
 
     async def create_task(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         approval = require_api_approval(request, "tasks.create", data)
         if approval:
             return approval
@@ -246,7 +280,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"success": True, "task": t})
 
     async def complete_task(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         approval = require_api_approval(request, "tasks.complete", data)
         if approval:
             return approval
@@ -261,7 +295,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"leads": leads})
 
     async def create_lead(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         approval = require_api_approval(request, "crm.lead.create", data)
         if approval:
             return approval
@@ -276,7 +310,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"success": True, "lead": lead})
 
     async def update_lead(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         approval = require_api_approval(request, "crm.lead.update", data)
         if approval:
             return approval
@@ -294,7 +328,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"campaigns": campaigns})
 
     async def create_campaign(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         approval = require_api_approval(request, "marketing.campaign.save", data)
         if approval:
             return approval
@@ -312,7 +346,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"manuscripts": manuscripts})
 
     async def create_manuscript(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         approval = require_api_approval(request, "manuscript.chapter.save", data)
         if approval:
             return approval
@@ -327,7 +361,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     # --- Voice & System APIs ---
     async def voice_speak(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         text = data.get("text", "")
         voice = data.get("voice")
         employee_name = data.get("employee")
@@ -339,10 +373,38 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         return JSONResponse({"success": True})
 
     async def clipboard_copy(request: Request):
-        data = await request.json()
+        data = await read_json(request)
         text = data.get("text", "")
         ok = copy_to_clipboard(text)
         return JSONResponse({"success": ok})
+
+    async def backup_database(request: Request):
+        data = await read_json(request)
+        approval = require_api_approval(request, "database.backup", data)
+        if approval:
+            return approval
+        destination = data.get("path")
+        try:
+            if destination:
+                requested = Path(destination).expanduser().resolve()
+                backup_root = (store.db_path.parent / "backups").resolve()
+                if backup_root not in requested.parents:
+                    return validation_response("backup_path_must_be_inside_backup_directory", 400)
+                destination_path = requested
+            else:
+                destination_path = None
+            path = store.backup_database(destination_path)
+        except (OSError, ValueError) as exc:
+            return validation_response(str(exc), 400)
+        return JSONResponse({"success": True, "path": str(path)})
+
+    async def csrf_token(request: Request):
+        token = request.cookies.get("agnostic_csrf") or security.create_csrf_token()
+        response = JSONResponse({"csrf_token": token})
+        if not request.cookies.get("agnostic_csrf"):
+            response.set_cookie("agnostic_csrf", token, httponly=False, samesite="lax",
+                                secure=request.url.scheme == "https", max_age=86400)
+        return response
 
     routes = [
         Route("/", endpoint=index, methods=["GET"]),
@@ -350,6 +412,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         Route("/auth/callback", endpoint=auth_callback, methods=["GET"]),
         Route("/auth/logout", endpoint=auth_logout, methods=["GET"]),
         Route("/api/me", endpoint=current_user, methods=["GET"]),
+        Route("/api/csrf", endpoint=csrf_token, methods=["GET"]),
         Route("/api/approvals", endpoint=get_approvals, methods=["GET"]),
         Route("/api/approvals/resolve", endpoint=resolve_approval, methods=["POST"]),
         Route("/api/workspaces", endpoint=get_workspaces, methods=["GET"]),
@@ -372,6 +435,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         Route("/api/voice/speak", endpoint=voice_speak, methods=["POST"]),
         Route("/api/voice/stop", endpoint=voice_stop, methods=["POST"]),
         Route("/api/clipboard/copy", endpoint=clipboard_copy, methods=["POST"]),
+        Route("/api/backup", endpoint=backup_database, methods=["POST"]),
         Mount("/static", app=StaticFiles(directory=str(STATIC_DIR)), name="static"),
     ]
 
@@ -386,6 +450,45 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
                     return RedirectResponse("/auth/login", status_code=303)
             return await call_next(request)
 
+    class RequestProtectionMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if request.method not in SAFE_METHODS:
+                length = request.headers.get("content-length")
+                try:
+                    if length and int(length) > max_body_bytes:
+                        return validation_response("request_body_too_large", 413)
+                    if not length:
+                        body = await request.body()
+                        if len(body) > max_body_bytes:
+                            return validation_response("request_body_too_large", 413)
+                except ValueError:
+                    return validation_response("invalid_content_length", 400)
+                session = security.get_session(request.cookies.get("agnostic_session"))
+                if session and not request.url.path.startswith("/auth/"):
+                    cookie_token = request.cookies.get("agnostic_csrf")
+                    header_token = request.headers.get("x-csrf-token")
+                    if not cookie_token or not header_token or cookie_token != header_token:
+                        return validation_response("csrf_validation_failed", 403)
+            try:
+                return await call_next(request)
+            except RequestValidationError as exc:
+                return validation_response(str(exc))
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+                return validation_response("invalid_request", 400)
+
+    class RateLimitMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if request.method not in SAFE_METHODS or request.url.path.startswith("/auth/"):
+                key = f"{request.client.host if request.client else 'unknown'}:{request.url.path}"
+                now = time.monotonic()
+                bucket = rate_buckets[key]
+                while bucket and bucket[0] <= now - rate_window:
+                    bucket.popleft()
+                if len(bucket) >= rate_limit:
+                    return validation_response("rate_limit_exceeded", 429)
+                bucket.append(now)
+            return await call_next(request)
+
     class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
             response = await call_next(request)
@@ -397,8 +500,10 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     middleware = [
         Middleware(SecurityHeadersMiddleware),
+        Middleware(RateLimitMiddleware),
+        Middleware(RequestProtectionMiddleware),
         Middleware(AuthMiddleware),
-        Middleware(CORSMiddleware, allow_origins=[allowed_origin], allow_methods=["GET", "POST"], allow_headers=["Content-Type"], allow_credentials=True),
+        Middleware(CORSMiddleware, allow_origins=[allowed_origin], allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-CSRF-Token"], allow_credentials=True),
     ]
 
     return Starlette(debug=False, routes=routes, middleware=middleware)

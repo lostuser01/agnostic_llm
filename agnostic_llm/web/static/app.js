@@ -4,6 +4,18 @@ let employeesData = [];
 let isRecording = false;
 let recognition = null;
 
+// Cookie-authenticated mutations use the double-submit CSRF token issued by the server.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (input, init = {}) => {
+  const method = (init.method || (input && input.method) || "GET").toUpperCase();
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const token = document.cookie.split("; ").find(item => item.startsWith("agnostic_csrf="))?.split("=")[1];
+    init.headers = new Headers(init.headers || {});
+    if (token) init.headers.set("X-CSRF-Token", decodeURIComponent(token));
+  }
+  return nativeFetch(input, init);
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   initEmployees();

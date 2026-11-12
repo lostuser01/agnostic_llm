@@ -9,31 +9,36 @@ from typing import Optional
 from .base import Employee
 from ..types import ToolSpec
 from ..macos import MacOSStore, send_macos_notification, copy_to_clipboard
+from ..integrations import CalendarTaskProvider, LocalCalendarTaskProvider, CalendarEvent, TaskItem
 
 
-def create_alex(store: Optional[MacOSStore] = None) -> Employee:
+def create_alex(
+    store: Optional[MacOSStore] = None,
+    calendar_provider: CalendarTaskProvider | None = None,
+) -> Employee:
     store = store or MacOSStore()
+    calendar_provider = calendar_provider or LocalCalendarTaskProvider(store)
 
     def get_daily_agenda(date: str = "") -> str:
         """Retrieve scheduled meetings, calendar events, and top priority tasks for a given date (defaults to today)."""
         target_date = date or datetime.date.today().isoformat()
-        events = store.list_events(date_prefix=target_date)
-        tasks = store.list_tasks(status="pending")
+        events = calendar_provider.list_events(target_date)
+        tasks = calendar_provider.list_tasks(status="pending")
 
         report = [f"📅 Agenda for {target_date}:"]
         if events:
             report.append("\nScheduled Calendar Events:")
             for ev in events:
-                loc = f" ({ev['location']})" if ev.get("location") else ""
-                report.append(f"  • {ev['start_time']} - {ev['title']} [{ev['duration_minutes']} min]{loc}")
+                loc = f" ({ev.location})" if ev.location else ""
+                report.append(f"  • {ev.start_time} - {ev.title} [{ev.duration_minutes} min]{loc}")
         else:
             report.append("\nNo calendar events scheduled yet.")
 
         if tasks:
             report.append("\nPending Tasks:")
             for t in tasks:
-                p_badge = f"[{t['priority'].upper()}]"
-                report.append(f"  • ID #{t['id']}: {p_badge} {t['title']} (Category: {t['category']})")
+                p_badge = f"[{t.priority.upper()}]"
+                report.append(f"  • ID #{t.provider_id}: {p_badge} {t.title} (Category: {t.category})")
         else:
             report.append("\nNo pending tasks.")
 
@@ -48,35 +53,31 @@ def create_alex(store: Optional[MacOSStore] = None) -> Employee:
         attendees: str = ""
     ) -> str:
         """Schedule a meeting or calendar event, saving to macOS Calendar and local schedule."""
-        ev = store.add_event(
-            title=title,
-            start_time=start_time,
-            duration_minutes=duration_minutes,
-            location=location,
-            notes=notes,
-            attendees=attendees
-        )
+        ev = calendar_provider.create_event(CalendarEvent(
+            title=title, start_time=start_time, duration_minutes=duration_minutes,
+            location=location, notes=notes, attendees=attendees,
+        ))
         send_macos_notification("Meeting Scheduled", f"{title} at {start_time}")
-        return f"Successfully scheduled meeting '{title}' for {start_time} ({duration_minutes} min). Event ID #{ev['id']}."
+        return f"Successfully scheduled meeting '{title}' for {start_time} ({duration_minutes} min). Event ID #{ev.provider_id or 'provider'}."
 
     def create_task(title: str, priority: str = "medium", due_date: str = "", category: str = "General") -> str:
         """Create a new action item or reminder with priority ('high', 'medium', 'low') and due date."""
-        t = store.create_task(title=title, priority=priority, due_date=due_date, category=category)
-        return f"Task #{t['id']} created: '{title}' [Priority: {priority.upper()}, Category: {category}]."
+        t = calendar_provider.create_task(TaskItem(title=title, priority=priority, due_date=due_date, category=category))
+        return f"Task #{t.provider_id or 'provider'} created: '{title}' [Priority: {priority.upper()}, Category: {category}]."
 
     def list_tasks(status: str = "pending", category: str = "") -> str:
         """List current tasks filtered by status ('pending', 'completed', 'all') and optional category."""
-        items = store.list_tasks(status=status, category=category if category else None)
+        items = calendar_provider.list_tasks(status=status, category=category)
         if not items:
             return f"No tasks found matching status '{status}'."
         lines = [f"Found {len(items)} task(s):"]
         for t in items:
-            lines.append(f"  • #{t['id']} [{t['status'].upper()}] [{t['priority'].upper()}] {t['title']} (Due: {t['due_date'] or 'None'})")
+            lines.append(f"  • #{t.provider_id} [{t.status.upper()}] [{t.priority.upper()}] {t.title} (Due: {t.due_date or 'None'})")
         return "\n".join(lines)
 
     def complete_task(task_id_or_title: str) -> str:
         """Mark a task as completed by ID or name."""
-        ok = store.complete_task(task_id_or_title)
+        ok = calendar_provider.complete_task(task_id_or_title)
         if ok:
             send_macos_notification("Task Completed", f"Marked task {task_id_or_title} as complete")
             return f"Successfully marked task '{task_id_or_title}' as completed."

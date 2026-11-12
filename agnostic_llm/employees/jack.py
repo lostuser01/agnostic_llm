@@ -10,13 +10,18 @@ from ..macos import MacOSStore
 from ..security import SecurityStore
 from ..security import validate_shell_command
 from ..types import ToolSpec
+from ..integrations import GitHubProvider, DisabledGitHubProvider, IntegrationNotConfigured
 
 
-def create_jack(store: Optional[MacOSStore] = None) -> Employee:
+def create_jack(
+    store: Optional[MacOSStore] = None,
+    github_provider: GitHubProvider | None = None,
+) -> Employee:
     store = store or MacOSStore()
     workspace_root = Path(os.environ.get("AGNOSTIC_REPO_ROOT", Path.cwd())).expanduser().resolve()
     security = SecurityStore(store.db_path)
     security.allow_workspace(str(workspace_root))
+    github_provider = github_provider or DisabledGitHubProvider()
 
     def inspect_repository() -> str:
         """Return the current Git branch and concise working-tree status."""
@@ -61,6 +66,37 @@ def create_jack(store: Optional[MacOSStore] = None) -> Employee:
         except (OSError, subprocess.SubprocessError) as exc:
             return f"Test execution failed: {exc}"
 
+    def inspect_github_repository(owner: str, name: str) -> str:
+        """Read repository metadata through the configured GitHub provider."""
+        try:
+            return str(github_provider.repository(owner, name))
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+
+    def create_github_pull_request(owner: str, name: str, title: str, head: str, base: str, body: str = "") -> str:
+        """Create a pull request through GitHub after approval."""
+        try:
+            result = github_provider.create_pull_request(owner, name, title, head, base, body)
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        return f"Pull request created: {result}"
+
+    def run_github_ci(owner: str, name: str, ref: str = "") -> str:
+        """Request a CI run through the configured GitHub provider."""
+        try:
+            result = github_provider.run_ci(owner, name, ref)
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        return f"CI run requested: {result}"
+
+    def get_github_ci_status(owner: str, name: str, ref: str = "") -> str:
+        """Read CI status through the configured GitHub provider."""
+        try:
+            result = github_provider.ci_status(owner, name, ref)
+        except IntegrationNotConfigured as exc:
+            return str(exc)
+        return f"CI status: {result}"
+
     tools = [
         ToolSpec(
             "inspect_repository",
@@ -74,6 +110,25 @@ def create_jack(store: Optional[MacOSStore] = None) -> Employee:
             {"type": "object", "properties": {}},
             fn=run_project_tests,
         ),
+        ToolSpec("inspect_github_repository", "Read GitHub repository metadata.",
+                 {"type": "object", "properties": {"owner": {"type": "string"}, "name": {"type": "string"}},
+                  "required": ["owner", "name"]}, fn=inspect_github_repository),
+        ToolSpec("create_github_pull_request", "Create a GitHub pull request after approval.",
+                 {"type": "object", "properties": {
+                     "owner": {"type": "string"}, "name": {"type": "string"}, "title": {"type": "string"},
+                     "head": {"type": "string"}, "base": {"type": "string"}, "body": {"type": "string"}
+                 }, "required": ["owner", "name", "title", "head", "base"]},
+                 fn=create_github_pull_request, approval_key="github.pull_request.create",
+                 approval_description="Create a GitHub pull request"),
+        ToolSpec("run_github_ci", "Request a GitHub Actions CI run after approval.",
+                 {"type": "object", "properties": {
+                     "owner": {"type": "string"}, "name": {"type": "string"}, "ref": {"type": "string"}
+                 }, "required": ["owner", "name"]}, fn=run_github_ci,
+                 approval_key="github.ci.run", approval_description="Request a GitHub CI run"),
+        ToolSpec("get_github_ci_status", "Read GitHub Actions CI status.",
+                 {"type": "object", "properties": {
+                     "owner": {"type": "string"}, "name": {"type": "string"}, "ref": {"type": "string"}
+                 }, "required": ["owner", "name"]}, fn=get_github_ci_status),
     ]
 
     prompt = """You are Jack, the Software Engineering Lead and GitHub Copilot specialist.
