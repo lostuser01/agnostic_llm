@@ -102,6 +102,23 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
             security.audit(session["login"], "approval.resolve", str(data.get("id", "")), data)
         return JSONResponse({"success": ok}, status_code=200 if ok else 404)
 
+    async def get_workspaces(request: Request):
+        return JSONResponse({"workspaces": security.list_workspaces()})
+
+    async def allow_workspace(request: Request):
+        data = await request.json()
+        path = str(data.get("path", "")).strip()
+        if not path:
+            return JSONResponse({"success": False, "error": "path_required"}, status_code=400)
+        security.allow_workspace(path)
+        return JSONResponse({"success": True, "workspaces": security.list_workspaces()})
+
+    async def revoke_workspace(request: Request):
+        data = await request.json()
+        path = str(data.get("path", "")).strip()
+        security.revoke_workspace(path)
+        return JSONResponse({"success": True, "workspaces": security.list_workspaces()})
+
     async def get_employees(request: Request):
         emps = []
         for e in roster.list_all():
@@ -288,6 +305,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         Route("/api/me", endpoint=current_user, methods=["GET"]),
         Route("/api/approvals", endpoint=get_approvals, methods=["GET"]),
         Route("/api/approvals/resolve", endpoint=resolve_approval, methods=["POST"]),
+        Route("/api/workspaces", endpoint=get_workspaces, methods=["GET"]),
+        Route("/api/workspaces/allow", endpoint=allow_workspace, methods=["POST"]),
+        Route("/api/workspaces/revoke", endpoint=revoke_workspace, methods=["POST"]),
         Route("/api/employees", endpoint=get_employees, methods=["GET"]),
         Route("/api/chat", endpoint=chat_handler, methods=["POST"]),
         Route("/api/agenda", endpoint=get_agenda, methods=["GET"]),

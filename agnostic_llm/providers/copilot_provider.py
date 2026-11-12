@@ -7,10 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
+from pathlib import Path
 from typing import Any
 
 from ..base import LLM
 from ..types import LLMResponse, Message, ToolSpec, map_exception
+from ..macos import DB_PATH
+from ..security import SecurityStore
 
 
 def to_copilot_prompt(messages: list[Message]) -> tuple[str, str | None]:
@@ -66,12 +70,66 @@ class CopilotLLM(LLM):
         api_key: str | None = None,
         github_token: str | None = None,
         working_directory: str | None = None,
+        security_db_path: str | None = None,
+        approval_timeout_seconds: int = 300,
         **_: Any,
     ):
         self.model = model
         self.github_token = github_token or api_key
-        self.working_directory = working_directory
+        self.working_directory = str(Path(working_directory or Path.cwd()).resolve())
+        self.security = SecurityStore(Path(security_db_path or DB_PATH))
+        self.security.allow_workspace(self.working_directory)
+        self.approval_timeout_seconds = approval_timeout_seconds
         self.name = f"copilot:{model}"
+
+    async def _permission_handler(self, request, invocation):
+        from copilot.generated.rpc import PermissionDecisionApproveOnce, PermissionDecisionReject
+
+        kind = getattr(request, "kind", "unknown")
+        if kind == "read":
+            paths = [getattr(request, "path", "")]
+        elif kind == "shell":
+            paths = list(getattr(request, "possible_paths", []) or [])
+        elif kind == "write":
+            paths = [getattr(request, "path", "")]
+        else:
+            paths = []
+        paths = [str(path) for path in paths if path]
+        if paths and not all(self.security.is_workspace_allowed(path) for path in paths):
+            self.security.audit("copilot", "permission.denied", kind, {"paths": paths})
+            return PermissionDecisionReject(feedback="Path is outside the configured workspace allowlist.")
+
+        details = {
+            "kind": kind,
+            "intention": getattr(request, "intention", ""),
+            "paths": paths,
+            "command": getattr(request, "full_command_text", ""),
+            "working_directory": getattr(request, "resolved_working_directory", self.working_directory),
+        }
+        action = f"copilot.{kind}"
+        decision = self.security.get_approval(action)
+        if decision == "allow":
+            self.security.audit("copilot", "permission.approved", action, details)
+            return PermissionDecisionApproveOnce()
+        if decision == "deny":
+            self.security.audit("copilot", "permission.denied", action, details)
+            return PermissionDecisionReject(feedback="Denied by local approval policy.")
+
+        request_id = self.security.create_approval_request("copilot", action, details)
+        deadline = time.monotonic() + self.approval_timeout_seconds
+        while time.monotonic() < deadline:
+            current = next(
+                (item for item in self.security.list_pending_approvals() if item["id"] == request_id),
+                None,
+            )
+            if current is None:
+                policy = self.security.get_approval(action)
+                if policy == "allow":
+                    return PermissionDecisionApproveOnce()
+                return PermissionDecisionReject(feedback="Approval denied or expired.")
+            await asyncio.sleep(0.5)
+        self.security.resolve_approval(request_id, "deny", remember=False)
+        return PermissionDecisionReject(feedback="Approval request timed out.")
 
     async def _chat_async(self, messages: list[Message], tools: list[ToolSpec] | None):
         try:
@@ -114,7 +172,7 @@ class CopilotLLM(LLM):
             session_kwargs = {
                 "model": self.model,
                 "tools": sdk_tools,
-                "on_permission_request": PermissionHandler.approve_all,
+                "on_permission_request": self._permission_handler,
             }
             if system:
                 session_kwargs["system_message"] = {

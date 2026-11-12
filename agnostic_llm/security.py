@@ -64,6 +64,11 @@ class SecurityStore:
                     created_at INTEGER NOT NULL,
                     resolved_at INTEGER
                 );
+                CREATE TABLE IF NOT EXISTS workspace_allowlist (
+                    path TEXT PRIMARY KEY,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at INTEGER NOT NULL
+                );
                 """
             )
 
@@ -192,6 +197,34 @@ class SecurityStore:
                     (row["action"], decision, now),
                 )
         return True
+
+    def allow_workspace(self, path: str):
+        resolved = str(Path(path).expanduser().resolve())
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO workspace_allowlist (path, enabled, created_at) VALUES (?, 1, ?)",
+                (resolved, int(time.time())),
+            )
+
+    def revoke_workspace(self, path: str):
+        resolved = str(Path(path).expanduser().resolve())
+        with self._connect() as conn:
+            conn.execute("UPDATE workspace_allowlist SET enabled = 0 WHERE path = ?", (resolved,))
+
+    def is_workspace_allowed(self, path: str) -> bool:
+        candidate = Path(path).expanduser().resolve()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT path FROM workspace_allowlist WHERE enabled = 1"
+            ).fetchall()
+        return any(candidate == Path(row["path"]) or Path(row["path"]) in candidate.parents for row in rows)
+
+    def list_workspaces(self) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT path, enabled, created_at FROM workspace_allowlist ORDER BY path"
+            ).fetchall()
+        return [dict(row) for row in rows]
 
 
 class ApprovalRequired(Exception):

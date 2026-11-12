@@ -13,7 +13,47 @@ document.addEventListener("DOMContentLoaded", () => {
   initCRMWorkspace();
   initMarketingWorkspace();
   initEmpathyWorkspace();
+  initApprovalCenter();
 });
+
+function initApprovalCenter() {
+  const panel = document.createElement("section");
+  panel.id = "approval-center";
+  panel.innerHTML = `<div class="approval-center-header"><strong>Pending approvals</strong><button id="refresh-approvals">Refresh</button></div><div id="approval-items">Loading...</div>`;
+  panel.style.cssText = "position:fixed;right:24px;bottom:24px;z-index:20;width:360px;padding:14px;background:#242a38;border:1px solid rgba(255,255,255,.15);border-radius:12px;box-shadow:0 12px 40px #0008;color:#f0f2f7;font:13px system-ui";
+  document.body.appendChild(panel);
+  document.getElementById("refresh-approvals").addEventListener("click", loadApprovals);
+  loadApprovals();
+  setInterval(loadApprovals, 2000);
+}
+
+async function loadApprovals() {
+  const target = document.getElementById("approval-items");
+  if (!target) return;
+  const res = await fetch("/api/approvals");
+  if (!res.ok) return;
+  const data = await res.json();
+  if (!data.approvals.length) {
+    target.textContent = "No pending approvals.";
+    return;
+  }
+  target.innerHTML = data.approvals.map(item => `
+    <div style="margin-top:10px;padding:10px;background:#1a1e28;border-radius:8px">
+      <div><strong>${escapeHtml(item.action)}</strong></div>
+      <div style="margin:5px 0;color:#aab3c5">${escapeHtml(JSON.stringify(item.details))}</div>
+      <button onclick="resolveApproval('${item.id}','allow')" style="margin-right:6px">Approve once + remember</button>
+      <button onclick="resolveApproval('${item.id}','deny')">Deny</button>
+    </div>`).join("");
+}
+
+async function resolveApproval(id, decision) {
+  await fetch("/api/approvals/resolve", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({id, decision, remember: true})
+  });
+  loadApprovals();
+}
 
 // --- Tab Switching ---
 function initTabs() {

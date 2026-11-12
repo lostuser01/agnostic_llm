@@ -102,3 +102,14 @@ def test_sensitive_tool_requires_and_remembers_approval(tmp_path):
     ])
     assert run_agent(approved_model, "publish", [tool], approval_checker=check)[0] == "done"
     assert called == [True]
+
+
+def test_workspace_allowlist(tmp_path):
+    security = SecurityStore(tmp_path / "workspace.db")
+    workspace = tmp_path / "repo"
+    outside = tmp_path / "other"
+    workspace.mkdir()
+    outside.mkdir()
+    security.allow_workspace(str(workspace))
+    assert security.is_workspace_allowed(str(workspace / "src" / "main.py"))
+    assert not security.is_workspace_allowed(str(outside / "secret.txt"))
