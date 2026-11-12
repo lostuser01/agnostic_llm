@@ -76,6 +76,11 @@ The dashboard then requires GitHub login, stores only a hashed session token loc
 and records authentication and employee actions in the SQLite audit log. Set
 `AGNOSTIC_AUTH_REQUIRED=0` only for isolated development without OAuth.
 
+The dashboard defaults to localhost-only CORS, security headers, and non-debug mode.
+If you intentionally serve it from another local origin, set
+`AGNOSTIC_ALLOWED_ORIGIN` to that exact origin. Dashboard mutations use the same
+remembered approval policies as employee tools.
+
 ### Use the terminal assistant
 
 ```bash

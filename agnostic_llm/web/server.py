@@ -28,6 +28,7 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
     store = MacOSStore()
     security = SecurityStore(store.db_path)
     auth_required = os.environ.get("AGNOSTIC_AUTH_REQUIRED", "1") != "0"
+    allowed_origin = os.environ.get("AGNOSTIC_ALLOWED_ORIGIN", "http://127.0.0.1:8000")
     try:
         roster = EmployeeRoster.from_config(config_path, store=store)
     except Exception as e:
@@ -102,6 +103,25 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
             security.audit(session["login"], "approval.resolve", str(data.get("id", "")), data)
         return JSONResponse({"success": ok}, status_code=200 if ok else 404)
 
+    def require_api_approval(request: Request, action: str, details: dict):
+        session = security.get_session(request.cookies.get("agnostic_session"))
+        actor = session["login"] if session else "anonymous"
+        decision = security.get_approval(action)
+        if decision == "allow":
+            security.audit(actor, "api.approved", action, details)
+            return None
+        if decision == "deny":
+            security.audit(actor, "api.denied", action, details)
+            return JSONResponse({"success": False, "error": "action_denied", "action": action}, status_code=403)
+        request_id = security.create_approval_request(actor, action, details)
+        return JSONResponse({
+            "success": False,
+            "error": "approval_required",
+            "request_id": request_id,
+            "action": action,
+            "details": details,
+        }, status_code=409)
+
     async def get_workspaces(request: Request):
         return JSONResponse({"workspaces": security.list_workspaces()})
 
@@ -110,12 +130,18 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
         path = str(data.get("path", "")).strip()
         if not path:
             return JSONResponse({"success": False, "error": "path_required"}, status_code=400)
+        approval = require_api_approval(request, "workspace.allow", {"path": path})
+        if approval:
+            return approval
         security.allow_workspace(path)
         return JSONResponse({"success": True, "workspaces": security.list_workspaces()})
 
     async def revoke_workspace(request: Request):
         data = await request.json()
         path = str(data.get("path", "")).strip()
+        approval = require_api_approval(request, "workspace.revoke", {"path": path})
+        if approval:
+            return approval
         security.revoke_workspace(path)
         return JSONResponse({"success": True, "workspaces": security.list_workspaces()})
 
@@ -186,6 +212,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     async def create_event(request: Request):
         data = await request.json()
+        approval = require_api_approval(request, "calendar.schedule", data)
+        if approval:
+            return approval
         ev = store.add_event(
             title=data.get("title", "New Event"),
             start_time=data.get("start_time", ""),
@@ -205,6 +234,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     async def create_task(request: Request):
         data = await request.json()
+        approval = require_api_approval(request, "tasks.create", data)
+        if approval:
+            return approval
         t = store.create_task(
             title=data.get("title", "New Task"),
             priority=data.get("priority", "medium"),
@@ -215,6 +247,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     async def complete_task(request: Request):
         data = await request.json()
+        approval = require_api_approval(request, "tasks.complete", data)
+        if approval:
+            return approval
         task_id = data.get("id")
         ok = store.complete_task(task_id)
         return JSONResponse({"success": ok})
@@ -227,6 +262,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     async def create_lead(request: Request):
         data = await request.json()
+        approval = require_api_approval(request, "crm.lead.create", data)
+        if approval:
+            return approval
         lead = store.add_lead(
             client_name=data.get("client_name", ""),
             company=data.get("company", ""),
@@ -239,6 +277,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     async def update_lead(request: Request):
         data = await request.json()
+        approval = require_api_approval(request, "crm.lead.update", data)
+        if approval:
+            return approval
         lead_id = int(data.get("id", 0))
         ok = store.update_lead(
             lead_id=lead_id,
@@ -254,6 +295,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     async def create_campaign(request: Request):
         data = await request.json()
+        approval = require_api_approval(request, "marketing.campaign.save", data)
+        if approval:
+            return approval
         camp = store.save_campaign(
             title=data.get("title", ""),
             content=data.get("content", ""),
@@ -269,6 +313,9 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
 
     async def create_manuscript(request: Request):
         data = await request.json()
+        approval = require_api_approval(request, "manuscript.chapter.save", data)
+        if approval:
+            return approval
         m = store.save_manuscript(
             title=data.get("title", "Untitled Chapter"),
             content=data.get("content", ""),
@@ -339,12 +386,22 @@ def create_app(config_path: str = "config.yaml") -> Starlette:
                     return RedirectResponse("/auth/login", status_code=303)
             return await call_next(request)
 
+    class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            response = await call_next(request)
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Referrer-Policy", "same-origin")
+            response.headers.setdefault("Content-Security-Policy", "default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self'")
+            return response
+
     middleware = [
+        Middleware(SecurityHeadersMiddleware),
         Middleware(AuthMiddleware),
-        Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]),
+        Middleware(CORSMiddleware, allow_origins=[allowed_origin], allow_methods=["GET", "POST"], allow_headers=["Content-Type"], allow_credentials=True),
     ]
 
-    return Starlette(debug=True, routes=routes, middleware=middleware)
+    return Starlette(debug=False, routes=routes, middleware=middleware)
 
 
 def launch_server(config_path: str = "config.yaml", host: str = "127.0.0.1", port: int = 8000):
